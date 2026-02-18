@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.db
+*.txt
+*.zip
+backup/
+files/
+docs/
+deployment/
