@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PaVa-Vak Admin 2FA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+
+  <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
+    <h2 class="text-2xl font-bold text-center mb-4">
+      🔐 Admin 2FA Setup
+    </h2>
+
+    <input
+      id="username"
+      placeholder="admin username"
+      class="w-full border px-3 py-2 rounded mb-3"
+      value="admin@pavavak.com"
+    />
+
+    <button
+      onclick="generate2FA()"
+      class="w-full bg-indigo-600 text-white py-2 rounded font-semibold"
+    >
+      Generate 2FA Secret
+    </button>
+
+    <div id="result" class="mt-4 hidden">
+      <p class="text-sm text-gray-600 mb-2">Scan QR Code:</p>
+      <img id="qr" class="mx-auto mb-3" />
+
+      <p class="text-xs text-gray-500 break-all">
+        OTP Auth URL:
+        <span id="otpUrl"></span>
+      </p>
+
+      <button
+        onclick="getToken()"
+        class="mt-4 w-full bg-green-600 text-white py-2 rounded"
+      >
+        Get Current Auth Code (Test)
+      </button>
+
+      <p id="token" class="text-center text-xl font-mono mt-3"></p>
+    </div>
+  </div>
+
+<script>
+let storedSecret = null;
+
+async function generate2FA() {
+  const username = document.getElementById('username').value;
+
+  const res = await fetch('/api/admin/2fa/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username })
+  });
+
+  const data = await res.json();
+
+  if (!data.success) {
+    alert('Failed to generate 2FA');
+    return;
+  }
+
+  storedSecret = data.secret;
+
+  document.getElementById('qr').src = data.qrCode;
+  document.getElementById('otpUrl').textContent = data.otpAuthUrl;
+  document.getElementById('result').classList.remove('hidden');
+}
+
+async function getToken() {
+  const res = await fetch('/api/admin/2fa/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  const data = await res.json();
+  document.getElementById('token').textContent = data.token;
+}
+</script>
+
+</body>
+</html>

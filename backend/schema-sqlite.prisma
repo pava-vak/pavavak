@@ -1,0 +1,189 @@
+// PaVa-Vak Database Schema - SQLite Version
+// This file defines the complete database structure
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model - stores all user accounts
+model User {
+  id              String    @id @default(uuid())
+  username        String    @unique
+  passwordHash    String
+  fullName        String
+  mobile          String?
+  email           String?
+  
+  // Status and role
+  status          String @default("PENDING")
+  role            String   @default("USER")
+  
+  // 2FA settings
+  twoFactorEnabled    Boolean @default(false)
+  twoFactorSecret     String?
+  twoFactorMethod     String?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  approvedAt      DateTime?
+  lastSeen        DateTime?
+  
+  // Relationships
+  approvedBy      String?
+  approver        User?     @relation("UserApprovals", fields: [approvedBy], references: [id])
+  approvedUsers   User[]    @relation("UserApprovals")
+  
+  inviteCodeUsed  String?
+  inviteCode      InviteCode? @relation(fields: [inviteCodeUsed], references: [id])
+  
+  // Relations
+  sentMessages        Message[]  @relation("SentMessages")
+  receivedMessages    Message[]  @relation("ReceivedMessages")
+  connectionsAsUserA  Connection[] @relation("UserAConnections")
+  connectionsAsUserB  Connection[] @relation("UserBConnections")
+  sessions            Session[]
+  createdInviteCodes  InviteCode[] @relation("CreatedInviteCodes")
+  adminLogs           AdminLog[]
+  conversationSettings ConversationTimerSetting[] @relation("UserSettings")
+}
+
+// Invite codes for user registration
+model InviteCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  createdBy   String
+  creator     User      @relation("CreatedInviteCodes", fields: [createdBy], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  
+  usedBy      String?
+  usedAt      DateTime?
+  user        User[]
+  
+  isRevoked   Boolean   @default(false)
+}
+
+// User-to-user connections (who can chat with whom)
+model Connection {
+  id          String    @id @default(uuid())
+  
+  userAId     String
+  userBId     String
+  userA       User      @relation("UserAConnections", fields: [userAId], references: [id], onDelete: Cascade)
+  userB       User      @relation("UserBConnections", fields: [userBId], references: [id], onDelete: Cascade)
+  
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  isActive    Boolean   @default(true)
+}
+
+// Messages
+model Message {
+  id                      String    @id @default(uuid())
+  
+  senderId                String
+  recipientId             String
+  sender                  User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient               User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  content                 String
+  
+  sentAt                  DateTime  @default(now())
+  deliveredAt             DateTime?
+  readAt                  DateTime?
+  
+  // Deletion flags
+  isDeletedBySender       Boolean   @default(false)
+  isDeletedByRecipient    Boolean   @default(false)
+  permanentlyDeleted      Boolean   @default(false)
+  
+  // Timer relation
+  timer                   MessageTimer?
+}
+
+// Message auto-delete timers
+model MessageTimer {
+  id                          String    @id @default(uuid())
+  
+  messageId                   String    @unique
+  message                     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  timerType                   String
+  deleteAfterSeconds          Int?
+  deleteAt                    DateTime?
+  
+  deletedFromRecipientView    Boolean   @default(false)
+}
+
+// Per-conversation timer settings
+model ConversationTimerSetting {
+  id                          String    @id @default(uuid())
+  
+  userId                      String
+  otherUserId                 String
+  user                        User      @relation("UserSettings", fields: [userId], references: [id], onDelete: Cascade)
+  
+  defaultTimerType            String
+  defaultDeleteAfterSeconds   Int?
+  
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+}
+
+// User sessions
+model Session {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  sessionToken    String    @unique
+  expiresAt       DateTime
+  
+  createdAt       DateTime  @default(now())
+  lastActivity    DateTime  @default(now())
+  
+  ipAddress       String?
+  userAgent       String?
+}
+
+// Admin action logs (audit trail)
+model AdminLog {
+  id              String    @id @default(uuid())
+  
+  adminId         String
+  admin           User      @relation(fields: [adminId], references: [id])
+  
+  action          String
+  targetUserId    String?
+  details         String?
+  
+  timestamp       DateTime  @default(now())
+}
+
+// System logs
+model SystemLog {
+  id          String      @id @default(uuid())
+  level       String
+  action      String
+  message     String
+  metadata    String?
+  timestamp   DateTime    @default(now())
+}
+
+// Login attempts (for security monitoring)
+model LoginAttempt {
+  id          String    @id @default(uuid())
+  username    String
+  ipAddress   String
+  userAgent   String?
+  success     Boolean
+  timestamp   DateTime  @default(now())
+  failureReason String?
+}

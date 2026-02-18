@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self';
+                   style-src 'self';
+                   connect-src 'self' http://localhost:3000;
+                   img-src 'self' data:;
+                   font-src 'self';
+                   object-src 'none';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaVa-Vak - Settings</title>
+    <link rel="stylesheet" href="css/settings.css">
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ Settings</h1>
+        <div class="header-actions">
+            <button id="backToChatBtn" class="btn-secondary">← Back to Chat</button>
+            <button id="logoutBtn" class="btn-danger">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="profile">Profile</button>
+            <button class="tab-btn" data-tab="security">Security</button>
+            <button class="tab-btn" data-tab="account">Account</button>
+        </div>
+
+        <!-- Profile Tab -->
+        <div class="tab-content active" id="tab-profile">
+            <div class="card">
+                <h2>Profile Information</h2>
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" disabled>
+                        <small>Username cannot be changed</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" disabled>
+                        <small>Email cannot be changed</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fullName">Full Name</label>
+                        <input type="text" id="fullName" placeholder="Enter your full name">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Security Tab -->
+        <div class="tab-content" id="tab-security">
+            <div class="card">
+                <h2>Change Password</h2>
+                <form id="passwordForm">
+                    <div class="form-group">
+                        <label for="currentPassword">Current Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="currentPassword" required>
+                            <button type="button" class="toggle-password" data-target="currentPassword">👁️</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newPassword">New Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="newPassword" required minlength="8">
+                            <button type="button" class="toggle-password" data-target="newPassword">👁️</button>
+                        </div>
+                        <small>Minimum 8 characters</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm New Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="confirmPassword" required minlength="8">
+                            <button type="button" class="toggle-password" data-target="confirmPassword">👁️</button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Change Password</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Two-Factor Authentication</h2>
+                <div id="twoFactorStatus">
+                    <p>Status: <span id="twoFactorStatusText" class="status-badge">Disabled</span></p>
+                    <button id="toggle2FABtn" class="btn btn-secondary">Enable 2FA</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Account Tab -->
+        <div class="tab-content" id="tab-account">
+            <div class="card">
+                <h2>Account Information</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Account Status</label>
+                        <span id="accountStatus" class="status-badge">Active</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Member Since</label>
+                        <span id="memberSince">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Last Login</label>
+                        <span id="lastLogin">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Role</label>
+                        <span id="userRole">User</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card danger-zone">
+                <h2>Danger Zone</h2>
+                <p>Once you delete your account, there is no going back. Please be certain.</p>
+                <button id="deleteAccountBtn" class="btn btn-danger">Delete Account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <p id="toastMessage"></p>
+    </div>
+
+    <script src="js/settings.js"></script>
+</body>
+</html>

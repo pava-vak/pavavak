@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self';
+                   style-src 'self';
+                   connect-src 'self' http://localhost:3000;
+                   img-src 'self' data:;
+                   font-src 'self';
+                   object-src 'none';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaVa-Vak - Login</title>
+    <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 PaVa-Vak</h1>
+        <p class="subtitle">Private Chat System</p>
+        <div id="message" class="message"></div>
+        
+        <!-- Main Login Form -->
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username"
+                       placeholder="Enter your username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="password" name="password"
+                           placeholder="Enter your password" required>
+                    <button type="button" class="toggle-password" id="togglePassword">
+                        👁️
+                    </button>
+                </div>
+            </div>
+            <button type="submit" id="loginBtn">Login</button>
+            
+            <div class="forgot-password">
+                <a href="#" id="forgotPasswordLink">Forgot Password?</a>
+            </div>
+        </form>
+
+        <!-- 2FA Form (hidden by default) -->
+        <form id="twoFactorForm" class="hidden">
+            <div class="form-group">
+                <label for="twoFactorCode">Two-Factor Authentication Code</label>
+                <input type="text" id="twoFactorCode" name="twoFactorCode"
+                       placeholder="000000" maxlength="6" pattern="[0-9]{6}"
+                       class="code-input" required>
+                <p class="hint">Enter the 6-digit code from your authenticator app</p>
+            </div>
+            <button type="submit" id="verify2FAButton">Verify</button>
+            <button type="button" class="secondary-btn" id="cancel2FAButton">Cancel</button>
+        </form>
+
+        <div class="register-link">
+            <p>Don't have an account? <a href="/register.html">Register here</a></p>
+        </div>
+
+        <div id="status" class="status">Checking server...</div>
+    </div>
+    
+    <script src="js/login.js"></script>
+</body>
+</html>

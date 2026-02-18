@@ -1,0 +1,16 @@
+ Volume in drive J is New Volume
+ Volume Serial Number is 36D9-20BC
+
+ Directory of J:\PaVa-Vak\backend\utils
+
+14-02-2026  08:11 PM    <DIR>          .
+14-02-2026  06:58 PM    <DIR>          ..
+14-02-2026  08:11 PM                 0 a.txt
+14-02-2026  01:39 PM            10,175 admin.js
+14-02-2026  01:39 PM             8,616 connections.js
+14-02-2026  01:39 PM             4,905 invites.js
+12-02-2026  06:45 AM             5,278 logger.js
+14-02-2026  01:39 PM             8,545 messages.js
+14-02-2026  01:39 PM             6,835 users.js
+               7 File(s)         44,354 bytes
+               2 Dir(s)  206,875,635,712 bytes free

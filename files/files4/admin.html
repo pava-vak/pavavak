@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self';
+                   style-src 'self';
+                   connect-src 'self' http://localhost:3000;
+                   img-src 'self' data:;
+                   font-src 'self';
+                   object-src 'none';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaVa-Vak - Admin Dashboard</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 PaVa-Vak Admin Dashboard</h1>
+        <div>
+            <span id="adminUsername">Admin</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Users</div>
+                <div class="stat-value" id="statTotalUsers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending Approvals</div>
+                <div class="stat-value" id="statPendingUsers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Connections</div>
+                <div class="stat-value" id="statConnections">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Messages</div>
+                <div class="stat-value" id="statMessages">0</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tabs-header">
+                <button class="tab-btn active" data-tab="pending">
+                    Pending Users (<span id="pendingCount">0</span>)
+                </button>
+                <button class="tab-btn" data-tab="users">All Users</button>
+                <button class="tab-btn" data-tab="connections">Connections</button>
+                <button class="tab-btn" data-tab="invites">Invite Codes</button>
+                <button class="tab-btn" data-tab="messages">Messages</button>
+            </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content active" id="content-pending">
+            <div class="section-header">
+                <h2>Pending User Approvals</h2>
+            </div>
+            <div id="pendingUsersList">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-users">
+            <div class="section-header">
+                <h2>All Users</h2>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr><td colspan="5" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="tab-content" id="content-connections">
+            <div class="section-header">
+                <h2>User Connections</h2>
+                <button class="btn btn-primary" onclick="openCreateConnectionModal()">
+                    + Create Connection
+                </button>
+            </div>
+            <div id="connectionsList">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-invites">
+            <div class="section-header">
+                <h2>Invite Codes</h2>
+                <button class="btn btn-success" onclick="generateInviteCode()">
+                    + Generate Code
+                </button>
+            </div>
+            <div id="invitesList">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+
+        <div class="tab-content" id="content-messages">
+            <div class="section-header">
+                <h2>Recent Messages</h2>
+            </div>
+            <div id="messagesList">
+                <p class="loading">Loading...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Connection Modal -->
+    <div id="createConnectionModal" class="modal">
+        <div class="modal-content">
+            <h3>Create Connection</h3>
+            <div class="form-group">
+                <label for="connectionUser1">User 1</label>
+                <select id="connectionUser1">
+                    <option value="">Select user...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="connectionUser2">User 2</label>
+                <select id="connectionUser2">
+                    <option value="">Select user...</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="createConnection()">Create</button>
+                <button class="btn" onclick="closeCreateConnectionModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <p id="toastMessage"></p>
+    </div>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
