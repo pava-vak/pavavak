@@ -15,6 +15,7 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
+const pgSession = require('connect-pg-simple')(session);
 
 // Initialize Prisma
 const prisma = new PrismaClient();
@@ -32,19 +33,24 @@ const io = socketIo(server, {
 });
 
 // Middleware
-// Helmet security (relaxed for development)
 app.use(helmet({
-  contentSecurityPolicy: false,  // Disable CSP in development
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
 }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// CORS (only in development)
+// CORS
 if (process.env.ENABLE_CORS === 'true') {
   app.use(cors({
     origin: process.env.DOMAIN,
+    credentials: true
+  }));
+} else {
+  // Always allow the Render domain in production
+  app.use(cors({
+    origin: process.env.DOMAIN || 'https://pavavak-backend.onrender.com',
     credentials: true
   }));
 }
@@ -56,8 +62,14 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined'));
 }
 
-// Session configuration
+// Session configuration - stored in PostgreSQL (Supabase)
 const sessionMiddleware = session({
+  store: new pgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: 'sessions',
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 60 // cleanup every hour
+  }),
   secret: process.env.SESSION_SECRET || 'pavavak-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
@@ -65,7 +77,7 @@ const sessionMiddleware = session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: parseInt(process.env.SESSION_MAX_AGE) || 604800000, // 7 days
-    sameSite: 'strict'
+    sameSite: 'lax'
   }
 });
 
@@ -157,7 +169,7 @@ app.get('/api/health', (req, res) => {
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // WebSocket connection handling
-const onlineUsers = new Map(); // userId -> socket.id
+const onlineUsers = new Map();
 
 io.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
@@ -176,7 +188,6 @@ io.on('connection', (socket) => {
     
     console.log(`User ${userId} connected on socket ${socket.id}`);
 
-    // Broadcast online status
     socket.broadcast.emit('user_status', {
       userId: userId,
       isOnline: true
@@ -194,7 +205,6 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Verify connection exists
       const connection = await prisma.connections.findFirst({
         where: {
           OR: [
@@ -210,7 +220,6 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Create message
       const message = await prisma.messages.create({
         data: {
           sender_id: senderId,
@@ -221,7 +230,6 @@ io.on('connection', (socket) => {
         }
       });
 
-      // Create timer if specified
       if (timer && timer.type !== 'keep_forever') {
         const timerData = {
           message_id: message.message_id,
@@ -236,7 +244,6 @@ io.on('connection', (socket) => {
         await prisma.message_timers.create({ data: timerData });
       }
 
-      // Send to recipient (if online)
       io.to(`user_${recipientId}`).emit('new_message', {
         messageId: message.message_id,
         senderId: senderId,
@@ -246,7 +253,6 @@ io.on('connection', (socket) => {
         timer: timer || null
       });
 
-      // Confirm to sender
       socket.emit('message_sent', {
         messageId: message.message_id,
         sentAt: message.sent_at
@@ -280,7 +286,6 @@ io.on('connection', (socket) => {
           }
         });
 
-        // Notify sender
         io.to(`user_${message.sender_id}`).emit('message_read', {
           messageId: messageId,
           readAt: new Date()
@@ -302,7 +307,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Stop typing
   socket.on('stop_typing', (data) => {
     const { recipientId } = data;
     if (recipientId && socket.userId) {
@@ -313,14 +317,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Disconnect
   socket.on('disconnect', async () => {
     const userId = socket.userId;
     
     if (userId) {
       onlineUsers.delete(userId);
 
-      // Broadcast offline status
       socket.broadcast.emit('user_status', {
         userId: userId,
         isOnline: false
@@ -341,23 +343,18 @@ setInterval(async () => {
           not: null
         }
       },
-      include: { 
-        messages: true 
-      }
+      include: { messages: true }
     });
 
     for (const timer of expiredTimers) {
-      // Delete the message
       await prisma.messages.delete({
         where: { message_id: timer.message_id }
       });
 
-      // Delete the timer
       await prisma.message_timers.delete({
         where: { message_id: timer.message_id }
       });
 
-      // Notify via WebSocket
       if (timer.messages) {
         io.to(`user_${timer.messages.receiver_id}`).emit('message_deleted', {
           messageId: timer.message_id
@@ -374,24 +371,7 @@ setInterval(async () => {
   } catch (error) {
     console.error('Timer processing error:', error);
   }
-}, 60000); // Run every minute
-
-// Cleanup expired sessions
-setInterval(async () => {
-  try {
-    const result = await prisma.sessions.deleteMany({
-      where: {
-        expires_at: { lt: new Date() }
-      }
-    });
-    
-    if (result.count > 0) {
-      console.log(`Cleaned up ${result.count} expired sessions`);
-    }
-  } catch (error) {
-    console.error('Session cleanup error:', error);
-  }
-}, 3600000); // Run every hour
+}, 60000);
 
 // SPA fallback (must be after API routes)
 app.get('*', (req, res) => {
@@ -401,7 +381,6 @@ app.get('*', (req, res) => {
 // Error handling
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-
   res.status(err.status || 500).json({
     success: false,
     error: process.env.NODE_ENV === 'production' 
@@ -413,11 +392,9 @@ app.use((err, req, res, next) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  
   server.close(() => {
     console.log('HTTP server closed');
   });
-
   await prisma.$disconnect();
   console.log('Database disconnected');
   process.exit(0);
