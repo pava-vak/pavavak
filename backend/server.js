@@ -136,6 +136,7 @@ const userRoutes = require('./routes/users');
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/diagnostic', require('./routes/diagnostic'));
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/connections', connectionRoutes);
