@@ -25,22 +25,40 @@ model users {
   reset_token_expiry DateTime?
 
   // Relations
-  connections_user1      connections[]              @relation("User1Connections")
-  connections_user2      connections[]              @relation("User2Connections")
-  messages_sent          messages[]                 @relation("SentMessages")
-  messages_received      messages[]                 @relation("ReceivedMessages")
-  invite_codes_used      invite_codes[]
-  admin_logs             admin_logs[]
-  login_attempts         login_attempts[]
+  connections_user1       connections[]               @relation("User1Connections")
+  connections_user2       connections[]               @relation("User2Connections")
+  messages_sent           messages[]                  @relation("SentMessages")
+  messages_received       messages[]                  @relation("ReceivedMessages")
+  invite_codes_used       invite_codes[]
+  admin_logs              admin_logs[]
+  login_attempts          login_attempts[]
   password_reset_requests password_reset_requests[]
+  device_tokens           device_tokens[]
+}
+
+// Device tokens for FCM push notifications
+model device_tokens {
+  id           Int      @id @default(autoincrement())
+  user_id      Int
+  token        String   @unique
+  platform     String   @default("android")
+  device_id    String?
+  is_active    Boolean  @default(true)
+  last_seen_at DateTime @default(now())
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id, is_active])
 }
 
 // Invite codes
 model invite_codes {
-  code             String   @id
-  used             Boolean  @default(false)
-  created_at       DateTime @default(now())
-  used_by_user_id  Int?
+  code               String   @id
+  used               Boolean  @default(false)
+  created_at         DateTime @default(now())
+  used_by_user_id    Int?
   created_by_user_id Int?
 
   used_by_user users? @relation(fields: [used_by_user_id], references: [user_id], onDelete: SetNull)
@@ -63,15 +81,17 @@ model connections {
 
 // Messages
 model messages {
-  message_id  Int       @id @default(autoincrement())
-  sender_id   Int
-  receiver_id Int
-  content     String
-  sent_at     DateTime  @default(now())
-  is_read     Boolean   @default(false)
-  read_at     DateTime?
+  message_id           Int       @id @default(autoincrement())
+  sender_id            Int
+  receiver_id          Int
+  content              String
+  sent_at              DateTime  @default(now())
+  is_read              Boolean   @default(false)
+  read_at              DateTime?
+  deleted_for_sender   Boolean   @default(false)
+  deleted_for_receiver Boolean   @default(false)
 
-  sender         users           @relation("SentMessages", fields: [sender_id], references: [user_id], onDelete: Cascade)
+  sender         users           @relation("SentMessages",   fields: [sender_id],   references: [user_id], onDelete: Cascade)
   receiver       users           @relation("ReceivedMessages", fields: [receiver_id], references: [user_id], onDelete: Cascade)
   message_timers message_timers?
 
