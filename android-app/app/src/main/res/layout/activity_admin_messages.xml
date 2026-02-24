@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/screen_bg">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/adminMessagesToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:title="Message Moderation"
+        android:titleTextColor="@color/text_primary"
+        android:background="@color/top_bar_bg"
+        app:navigationIcon="@android:drawable/ic_menu_revert" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp"
+        android:text="Recent messages. Delete here removes from backend for everyone."
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp" />
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/adminMessagesSwipeRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/adminMessagesRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="10dp" />
+
+            <ProgressBar
+                android:id="@+id/adminMessagesProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center" />
+
+            <TextView
+                android:id="@+id/adminMessagesEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="No recent messages"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone"
+                android:padding="16dp" />
+        </FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+</LinearLayout>
+

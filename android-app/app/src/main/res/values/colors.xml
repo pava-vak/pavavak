@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="screen_bg">#F3F6FB</color>
+    <color name="top_bar_bg">#FFFFFF</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="text_primary">#11213E</color>
+    <color name="text_secondary">#5D6F90</color>
+    <color name="accent_primary">#2C5CD6</color>
+    <color name="input_bg">#E9EEF7</color>
+    <color name="selection_bg">#D8E4FF</color>
+    <color name="bubble_mine">#2A6DE2</color>
+    <color name="bubble_other">#E4EBF7</color>
+    <color name="reply_bg">#CEDBF6</color>
+    <color name="reaction_bg">#D3DDF0</color>
+    <color name="avatar_bg">#2C5DAA</color>
+    <color name="status_sent_bg">#D7DEEB</color>
+    <color name="status_delivered_bg">#BDD1F7</color>
+    <color name="status_read_bg">#A6D8FF</color>
+    <color name="status_failed_bg">#F8C7C7</color>
+</resources>

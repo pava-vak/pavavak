@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408062421132",
+    "project_id": "pavavak-cc622",
+    "storage_bucket": "pavavak-cc622.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408062421132:android:18a7f769595193995fb3a9",
+        "android_client_info": {
+          "package_name": "com.pavavak.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKiu-9_dkGM7gnxQ75LsekZL882GbOfpA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

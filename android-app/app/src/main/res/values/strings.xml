@@ -1,0 +1,10 @@
+﻿<resources>
+    <string name="app_name">PaVa-Vak LIVE</string>
+    <string name="pin_hint">Enter 4-digit PIN</string>
+    <string name="unlock">Unlock</string>
+    <string name="use_biometric">Use biometric</string>
+    <string name="set_pin">Set PIN</string>
+    <string name="change_real_pin">Change Real PIN</string>
+    <string name="set_or_change_decoy_pin">Set/Change Decoy PIN</string>
+    <string name="pin_setup_help">First login: set PIN and biometric, then continue.</string>
+</resources>
