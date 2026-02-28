@@ -1,9 +1,8 @@
 // Admin Controller
-const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // Helper function to log admin actions
 async function logAdminAction(adminId, action, details) {

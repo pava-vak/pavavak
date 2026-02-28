@@ -1,5 +1,6 @@
 ﻿package com.pavavak.app.nativechat
 
+import android.content.Context
 import android.webkit.CookieManager
 import android.util.Log
 import com.pavavak.app.BuildConfig
@@ -80,6 +81,31 @@ object NativeApi {
 
     suspend fun logout() = withContext(Dispatchers.IO) {
         request("POST", "/api/auth/logout")
+    }
+
+    suspend fun registerFcmToken(
+        token: String,
+        platform: String = "android",
+        deviceId: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (token.isBlank()) return@withContext false
+        val body = JSONObject()
+            .put("token", token)
+            .put("platform", platform)
+        if (!deviceId.isNullOrBlank()) {
+            body.put("deviceId", deviceId)
+        }
+        val json = request("POST", "/api/mobile/register-token", body) ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun registerFcmTokenFromPrefs(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val token = context.getSharedPreferences("fcm_state", Context.MODE_PRIVATE)
+            .getString("fcm_token", null)
+            ?.trim()
+            .orEmpty()
+        if (token.isBlank()) return@withContext false
+        registerFcmToken(token)
     }
 
     suspend fun getSession(): SessionInfo = withContext(Dispatchers.IO) {

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaVa-Vak Server Status</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 { color: #58a6ff; font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 0.8rem; margin-bottom: 20px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8b949e;
+    margin-bottom: 12px;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+  }
+  .badge-green  { background: #1a3a1a; color: #3fb950; border: 1px solid #2ea043; }
+  .badge-red    { background: #3a1a1a; color: #f85149; border: 1px solid #da3633; }
+  .badge-yellow { background: #3a2a0a; color: #d29922; border: 1px solid #9e6a03; }
+  .badge-grey   { background: #1c2128; color: #8b949e; border: 1px solid #30363d; }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #21262d;
+    font-size: 0.85rem;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: #8b949e; }
+  .stat-value { color: #e6edf3; font-weight: 500; }
+  .stat-value.good  { color: #3fb950; }
+  .stat-value.warn  { color: #d29922; }
+  .stat-value.bad   { color: #f85149; }
+
+  /* Restart panel */
+  .restart-card {
+    background: #161b22;
+    border: 1px solid #da3633;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .restart-card .card-title { color: #f85149; }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  input[type="password"], input[type="text"] {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #e6edf3;
+    padding: 8px 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+  }
+  input:focus { outline: none; border-color: #58a6ff; }
+
+  button {
+    background: #da3633;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    transition: background 0.2s;
+  }
+  button:hover  { background: #f85149; }
+  button:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+  button.btn-blue { background: #1f6feb; }
+  button.btn-blue:hover { background: #388bfd; }
+
+  .result-msg {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  .result-msg.success { background: #1a3a1a; color: #3fb950; border: 1px solid #2ea043; }
+  .result-msg.error   { background: #3a1a1a; color: #f85149; border: 1px solid #da3633; }
+
+  /* Logs */
+  .logs-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .log-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab-btn {
+    background: #21262d;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .tab-btn.active { background: #1f6feb; color: white; border-color: #1f6feb; }
+  pre {
+    background: #010409;
+    border: 1px solid #21262d;
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 350px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #c9d1d9;
+  }
+  pre .err { color: #f85149; }
+  pre .ok  { color: #3fb950; }
+
+  .refresh-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    color: #8b949e;
+    font-size: 0.8rem;
+  }
+  .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3fb950;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  .dot.red { background: #f85149; animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  .uptime-big {
+    font-size: 2rem;
+    color: #3fb950;
+    font-weight: bold;
+    margin: 8px 0 4px;
+  }
+
+  #lastUpdated { color: #3fb950; }
+  .offline-banner {
+    display: none;
+    background: #3a1a1a;
+    border: 1px solid #da3633;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    color: #f85149;
+    font-size: 1rem;
+    text-align: center;
+  }
+  .offline-banner.show { display: block; }
+</style>
+</head>
+<body>
+
+<h1>🖥 PaVa-Vak Server Monitor</h1>
+<p class="subtitle">Auto-refreshes every 10 seconds • All times UTC</p>
+
+<!-- Secret key input -->
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-title">🔑 Access Key</div>
+  <div class="input-row">
+    <input type="password" id="secretKey" placeholder="Enter diagnostic key..." />
+    <button class="btn-blue" onclick="loadAll()">Connect</button>
+  </div>
+  <p style="font-size:0.75rem;color:#8b949e;margin-top:8px;">
+    Key is set in your server .env as RESTART_SECRET
+  </p>
+</div>
+
+<!-- Offline banner -->
+<div class="offline-banner" id="offlineBanner">
+  ⚠️ SERVER NOT RESPONDING — Cannot reach http://144.24.129.194:3000<br>
+  <small style="color:#8b949e">You may need to reboot from Oracle Cloud Console</small>
+</div>
+
+<!-- Refresh bar -->
+<div class="refresh-bar">
+  <span><span class="dot" id="statusDot"></span> <span id="connectionStatus">Connecting...</span></span>
+  <span>Last updated: <span id="lastUpdated">—</span></span>
+</div>
+
+<!-- Stats grid -->
+<div class="grid" id="statsGrid">
+  <div class="card">
+    <div class="card-title">⏱ Uptime</div>
+    <div class="uptime-big" id="uptimeVal">—</div>
+    <div class="stat-row">
+      <span class="stat-label">Status</span>
+      <span id="pm2Status"><span class="status-badge badge-grey">—</span></span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">PM2 Restarts</span>
+      <span class="stat-value" id="pm2Restarts">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Environment</span>
+      <span class="stat-value" id="envVal">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💾 Memory (Node.js)</div>
+    <div class="stat-row">
+      <span class="stat-label">Heap Used</span>
+      <span class="stat-value" id="heapUsed">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Heap Total</span>
+      <span class="stat-value" id="heapTotal">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">RSS (total process)</span>
+      <span class="stat-value" id="rss">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">System RAM</span>
+      <span class="stat-value" id="sysMem">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🗄 Database</div>
+    <div class="stat-row">
+      <span class="stat-label">Status</span>
+      <span id="dbStatus"><span class="status-badge badge-grey">—</span></span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Latency</span>
+      <span class="stat-value" id="dbLatency">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Online Users</span>
+      <span class="stat-value" id="onlineUsers">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Disk</span>
+      <span class="stat-value" id="diskVal">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Restart -->
+<div class="restart-card">
+  <div class="card-title">🔁 Restart Server</div>
+  <p style="font-size:0.82rem;color:#8b949e;margin-bottom:8px;">
+    Use if the server is responding but behaving incorrectly.
+    For a complete freeze, use Oracle Cloud Console → Reboot.
+  </p>
+  <button onclick="restartServer()" id="restartBtn">⚡ Restart pavavak (pm2 restart)</button>
+  <div id="restartMsg"></div>
+</div>
+
+<!-- Logs -->
+<div class="logs-card">
+  <div class="card-title">📋 Recent Logs</div>
+  <div class="log-tabs">
+    <button class="tab-btn active" onclick="showTab('error')">Error Log</button>
+    <button class="tab-btn" onclick="showTab('out')">Output Log</button>
+    <button class="btn-blue" style="margin-left:auto;padding:4px 12px;font-size:0.8rem;" onclick="loadLogs()">↻ Refresh</button>
+  </div>
+  <pre id="errorLogPre">Press Connect above to load logs...</pre>
+  <pre id="outLogPre" style="display:none;">Press Connect above to load logs...</pre>
+</div>
+
+<script>
+const SERVER = 'http://144.24.129.194:3000';
+let autoRefresh = null;
+let currentTab  = 'error';
+
+function key() { return document.getElementById('secretKey').value.trim(); }
+
+async function loadAll() {
+  if (!key()) { alert('Enter diagnostic key first'); return; }
+  await loadStatus();
+  await loadLogs();
+  clearInterval(autoRefresh);
+  autoRefresh = setInterval(loadStatus, 10000);
+}
+
+async function loadStatus() {
+  const dot    = document.getElementById('statusDot');
+  const banner = document.getElementById('offlineBanner');
+  const connEl = document.getElementById('connectionStatus');
+
+  try {
+    const res  = await fetch(`${SERVER}/api/diagnostic/status?key=${encodeURIComponent(key())}`, {
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (res.status === 401) {
+      connEl.textContent = 'Wrong key';
+      dot.className = 'dot red';
+      return;
+    }
+
+    const d = await res.json();
+    banner.classList.remove('show');
+    dot.className         = 'dot';
+    connEl.textContent    = 'Connected';
+    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+
+    // Uptime
+    document.getElementById('uptimeVal').textContent = d.uptime?.human || '—';
+
+    // PM2
+    const pm2s = d.pm2?.status || '—';
+    document.getElementById('pm2Status').innerHTML =
+      `<span class="status-badge ${pm2s === 'online' ? 'badge-green' : 'badge-red'}">${pm2s}</span>`;
+    const restarts = d.pm2?.restarts ?? '—';
+    const restEl   = document.getElementById('pm2Restarts');
+    restEl.textContent = restarts;
+    restEl.className   = 'stat-value ' + (restarts > 10 ? 'bad' : restarts > 3 ? 'warn' : 'good');
+    document.getElementById('envVal').textContent = d.app?.env || '—';
+
+    // Memory
+    document.getElementById('heapUsed').textContent  = d.memory?.heapUsed  || '—';
+    document.getElementById('heapTotal').textContent = d.memory?.heapTotal || '—';
+    const rssVal  = parseInt(d.memory?.rss) || 0;
+    const rssEl   = document.getElementById('rss');
+    rssEl.textContent = d.memory?.rss || '—';
+    rssEl.className   = 'stat-value ' + (rssVal > 300 ? 'bad' : rssVal > 200 ? 'warn' : 'good');
+    document.getElementById('sysMem').textContent = d.system?.memory || '—';
+
+    // DB
+    const dbOk = d.database?.status === 'connected';
+    document.getElementById('dbStatus').innerHTML =
+      `<span class="status-badge ${dbOk ? 'badge-green' : 'badge-red'}">${d.database?.status || '—'}</span>`;
+    const lat  = parseInt(d.database?.latency) || 0;
+    const latEl = document.getElementById('dbLatency');
+    latEl.textContent = d.database?.latency || '—';
+    latEl.className   = 'stat-value ' + (lat > 500 ? 'bad' : lat > 200 ? 'warn' : 'good');
+    document.getElementById('onlineUsers').textContent = d.app?.onlineUsers ?? '—';
+    document.getElementById('diskVal').textContent     = d.system?.disk || '—';
+
+  } catch (e) {
+    dot.className = 'dot red';
+    connEl.textContent = 'Server not responding';
+    banner.classList.add('show');
+    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+  }
+}
+
+async function loadLogs() {
+  if (!key()) return;
+  try {
+    const res  = await fetch(`${SERVER}/api/diagnostic/logs?key=${encodeURIComponent(key())}`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    const d = await res.json();
+
+    // Colorize error log
+    document.getElementById('errorLogPre').innerHTML =
+      colorize(d.errorLog || '(empty)');
+    document.getElementById('outLogPre').innerHTML =
+      colorize(d.outLog || '(empty)');
+
+    // Scroll to bottom
+    ['errorLogPre','outLogPre'].forEach(id => {
+      const el = document.getElementById(id);
+      el.scrollTop = el.scrollHeight;
+    });
+  } catch (e) {
+    document.getElementById('errorLogPre').textContent = 'Could not load logs — server not responding';
+  }
+}
+
+function colorize(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/(error|Error|ERROR|failed|Failed|FAILED|exception|Exception)/g, '<span class="err">$1</span>')
+    .replace(/(200|✅|Connected|online|success|Success)/g, '<span class="ok">$1</span>');
+}
+
+function showTab(tab) {
+  currentTab = tab;
+  document.getElementById('errorLogPre').style.display = tab === 'error' ? 'block' : 'none';
+  document.getElementById('outLogPre').style.display   = tab === 'out'   ? 'block' : 'none';
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && tab === 'error') || (i === 1 && tab === 'out'));
+  });
+}
+
+async function restartServer() {
+  if (!key()) { alert('Enter key first'); return; }
+  if (!confirm('Restart the pavavak server process?\n\nThis will disconnect all users for ~5 seconds.')) return;
+
+  const btn    = document.getElementById('restartBtn');
+  const msgEl  = document.getElementById('restartMsg');
+  btn.disabled = true;
+  btn.textContent = 'Restarting...';
+
+  try {
+    const res  = await fetch(`${SERVER}/api/diagnostic/restart`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ key: key() }),
+      signal:  AbortSignal.timeout(10000)
+    });
+    const d = await res.json();
+    if (d.success) {
+      msgEl.className   = 'result-msg success';
+      msgEl.textContent = '✅ Restart triggered. Server will be back in ~5 seconds...';
+      // Wait 8s then reload status
+      setTimeout(() => { loadStatus(); loadLogs(); }, 8000);
+    } else {
+      msgEl.className   = 'result-msg error';
+      msgEl.textContent = '❌ ' + (d.error || 'Failed');
+    }
+  } catch (e) {
+    msgEl.className   = 'result-msg error';
+    msgEl.textContent = '❌ No response — server may already be down.';
+  }
+
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '⚡ Restart pavavak (pm2 restart)';
+  }, 10000);
+}
+
+// Auto-connect if key is pre-filled
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('secretKey').addEventListener('keypress', e => {
+    if (e.key === 'Enter') loadAll();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,4 +1,10 @@
-const API_URL = 'https://pavavak-backend.onrender.com/api';
+// ============================================================
+// PaVa-Vak Login Logic  |  login.js
+// Fix: API_URL changed from hardcoded Render.com to relative /api
+// Everything else identical to original
+// ============================================================
+
+const API_URL = '/api';
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -19,7 +25,6 @@ async function checkServer() {
             method: 'GET',
             credentials: 'include'
         });
-
         statusEl.textContent = '✓ Server Online';
         statusEl.className = 'status online';
     } catch (error) {
@@ -31,11 +36,9 @@ async function checkServer() {
 // Show message
 function showMessage(text, type) {
     const messageEl = document.getElementById('message');
-
     messageEl.textContent = text;
     messageEl.className = `message ${type}`;
     messageEl.style.display = 'block';
-
     setTimeout(() => {
         messageEl.style.display = 'none';
     }, 5000);
@@ -58,9 +61,7 @@ function initLogin() {
         try {
             const response = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ username, password })
             });
@@ -74,7 +75,6 @@ function initLogin() {
                     loginBtn.textContent = 'Login';
                 } else {
                     showMessage('✓ Login successful!', 'success');
-                    
                     setTimeout(() => {
                         window.location.href = data.redirect || '/chat.html';
                     }, 1000);
@@ -111,9 +111,7 @@ function initTwoFactor() {
         try {
             const response = await fetch(`${API_URL}/auth/verify-2fa`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ code })
             });
@@ -122,7 +120,6 @@ function initTwoFactor() {
 
             if (data.success) {
                 showMessage('✓ 2FA verified!', 'success');
-                
                 setTimeout(() => {
                     window.location.href = data.redirect || (data.user.isAdmin ? '/admin.html' : '/chat.html');
                 }, 1000);
@@ -191,7 +188,6 @@ function initForgotPassword() {
 
     link.addEventListener('click', function(e) {
         e.preventDefault();
-        
         alert(
             'Password Reset Instructions:\n\n' +
             '1. Contact your system administrator\n' +
@@ -205,9 +201,10 @@ function initForgotPassword() {
 // Check if already logged in
 async function checkSession() {
     try {
-        const response = await fetch(`${API_URL}/auth/session`, {
-            credentials: 'include'
-        });
+       const response = await fetch(`${API_URL}/auth/session?t=${Date.now()}`, {
+    credentials: 'include',
+    cache: 'no-store'
+});
         const data = await response.json();
 
         if (data.authenticated) {

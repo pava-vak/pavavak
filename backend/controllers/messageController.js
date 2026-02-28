@@ -1,8 +1,7 @@
 // Message Controller
-const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // GET /api/messages/:otherUserId - Get conversation with another user
 exports.getConversation = async (req, res) => {

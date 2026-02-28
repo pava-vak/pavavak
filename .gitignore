@@ -1,9 +1,53 @@
+# Dependencies
 node_modules/
+**/node_modules/
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Secrets / keys / certs
+*.key
+*.pem
+*.ppk
+*.p12
+*.jks
+**/secrets/
+
+# Databases
 *.db
-*.txt
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+build/
+dist/
+coverage/
+
+# Android local/build files
+android-app/.gradle/
+android-app/.idea/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archives / backups
 *.zip
 backup/
 files/
-docs/
-deployment/
+files9/
+
+# Local copies and temp folders
+backend - Copy/
+server-code/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

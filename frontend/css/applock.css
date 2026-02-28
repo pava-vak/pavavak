@@ -1,0 +1,273 @@
+/* ============================================================
+   PaVa-Vak App Lock  |  applock.css
+   The overlay is VISIBLE BY DEFAULT via CSS.
+   applock.js hides it only after confirming unlock is valid.
+   This ensures zero content flash before the lock check.
+   ============================================================ */
+
+/* ── Lock Overlay ────────────────────────────────────────────
+   Full screen, above everything, shown by default.
+   Hidden only by applock.js after successful auth check.
+────────────────────────────────────────────────────────── */
+#app-lock-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    /* Overlay is visible by default — JS hides it if not needed */
+}
+
+/* Hidden state — set by JS when unlocked */
+#app-lock-overlay.unlocked {
+    display: none;
+}
+
+/* ── Lock Card ───────────────────────────────────────────── */
+.lock-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Lock Icon ───────────────────────────────────────────── */
+.lock-icon {
+    font-size: 52px;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.lock-title {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.lock-subtitle {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    margin-bottom: 32px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── PIN Dots Display ────────────────────────────────────── */
+.pin-dots {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 28px;
+}
+
+.pin-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    background: transparent;
+    transition: all 0.2s;
+}
+
+.pin-dot.filled {
+    background: #667eea;
+    border-color: #667eea;
+    transform: scale(1.15);
+}
+
+.pin-dot.error {
+    background: #ef4444;
+    border-color: #ef4444;
+    animation: shake 0.4s ease;
+}
+
+/* ── PIN Keypad ──────────────────────────────────────────── */
+.pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.pin-key {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 22px;
+    font-weight: 500;
+    padding: 16px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.pin-key:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.pin-key:active {
+    background: rgba(102, 126, 234, 0.4);
+    transform: scale(0.94);
+}
+
+.pin-key.pin-delete {
+    font-size: 18px;
+}
+
+.pin-key.pin-empty {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* ── Biometric Button ────────────────────────────────────── */
+.biometric-btn {
+    width: 100%;
+    padding: 14px;
+    background: rgba(102, 126, 234, 0.2);
+    border: 1px solid rgba(102, 126, 234, 0.4);
+    border-radius: 12px;
+    color: #a5b4fc;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: background 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: none; /* shown only if biometric available */
+}
+
+.biometric-btn:hover {
+    background: rgba(102, 126, 234, 0.35);
+}
+
+/* ── Forgot PIN Link ─────────────────────────────────────── */
+.forgot-pin-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 8px;
+    transition: color 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.forgot-pin-btn:hover {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Error Message ───────────────────────────────────────── */
+.lock-error {
+    color: #f87171;
+    font-size: 13px;
+    margin-bottom: 12px;
+    min-height: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Reset PIN Form ──────────────────────────────────────── */
+.reset-pin-form {
+    display: none;
+}
+
+.reset-pin-form.visible {
+    display: block;
+}
+
+.lock-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    color: white;
+    font-size: 15px;
+    margin-bottom: 12px;
+    outline: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    box-sizing: border-box;
+}
+
+.lock-input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.lock-input:focus {
+    border-color: rgba(102, 126, 234, 0.6);
+}
+
+.lock-btn-primary {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: opacity 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.lock-btn-primary:hover {
+    opacity: 0.9;
+}
+
+.lock-btn-secondary {
+    width: 100%;
+    padding: 11px;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.lock-btn-secondary:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    color: white;
+}
+
+/* ── PIN Setup Screen (shown in Settings) ────────────────── */
+#pin-setup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99998;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+#pin-setup-overlay.visible {
+    display: flex;
+}
+
+/* ── Animations ──────────────────────────────────────────── */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%       { transform: translateX(-8px); }
+    40%       { transform: translateX(8px); }
+    60%       { transform: translateX(-6px); }
+    80%       { transform: translateX(6px); }
+}

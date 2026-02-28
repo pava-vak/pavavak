@@ -2,15 +2,43 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
+    <!-- ═══════════════════════════════════════════════════════
+         CONTENT SECURITY POLICY
+         Updated: added wss: for Socket.io, manifest-src,
+                  worker-src for PWA. No unsafe-inline needed.
+    ════════════════════════════════════════════════════════ -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
                    script-src 'self';
                    style-src 'self';
-                   connect-src 'self' http://localhost:3000;
+                   connect-src 'self' http://localhost:3000 ws://localhost:3000 wss://localhost:3000;
                    img-src 'self' data:;
                    font-src 'self';
+                   manifest-src 'self';
+                   worker-src 'self' blob:;
                    object-src 'none';">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#1a73e8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PaVa-Vak" />
+    <meta name="application-name" content="PaVa-Vak" />
+    <meta name="description" content="PaVa-Vak — Private Family Chat" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
     <title>PaVa-Vak - Login</title>
     <link rel="stylesheet" href="css/login.css">
 </head>
@@ -19,26 +47,27 @@
         <h1>🚀 PaVa-Vak</h1>
         <p class="subtitle">Private Chat System</p>
         <div id="message" class="message"></div>
-        
+
         <!-- Main Login Form -->
         <form id="loginForm">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username"
-                       placeholder="Enter your username" required autofocus>
+                       placeholder="Enter your username" required autofocus
+                       autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
                 <div class="password-wrapper">
                     <input type="password" id="password" name="password"
-                           placeholder="Enter your password" required>
+                           placeholder="Enter your password" required
+                           autocomplete="current-password">
                     <button type="button" class="toggle-password" id="togglePassword">
                         👁️
                     </button>
                 </div>
             </div>
             <button type="submit" id="loginBtn">Login</button>
-            
             <div class="forgot-password">
                 <a href="#" id="forgotPasswordLink">Forgot Password?</a>
             </div>
@@ -50,7 +79,8 @@
                 <label for="twoFactorCode">Two-Factor Authentication Code</label>
                 <input type="text" id="twoFactorCode" name="twoFactorCode"
                        placeholder="000000" maxlength="6" pattern="[0-9]{6}"
-                       class="code-input" required>
+                       class="code-input" required
+                       autocomplete="one-time-code" inputmode="numeric">
                 <p class="hint">Enter the 6-digit code from your authenticator app</p>
             </div>
             <button type="submit" id="verify2FAButton">Verify</button>
@@ -62,8 +92,23 @@
         </div>
 
         <div id="status" class="status">Checking server...</div>
+
+        <!-- PWA Install Button — styled via login.css, shown by pwa.js -->
+        <button id="pwa-install-btn" onclick="pwaInstall()">
+            📲 Install PaVa-Vak App
+        </button>
+
+        <!-- iOS Install Hint — shown only on iOS Safari via JS below -->
+        <div id="ios-install-hint">
+            To install: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
+        </div>
     </div>
-    
+
+    <!-- Scripts -->
     <script src="js/login.js"></script>
+    <script src="js/pwa.js"></script>
+
+    <!-- iOS Safari detection — no inline styles, uses CSS class -->
+    <script src="js/ios-detect.js"></script>
 </body>
 </html>

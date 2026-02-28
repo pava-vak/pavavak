@@ -276,3 +276,254 @@ body {
         flex-direction: column;
     }
 }
+
+/* ── Settings Extras — added for PIN/biometric/timer UI ─────
+   These classes replace inline styles removed from settings.html
+────────────────────────────────────────────────────────── */
+
+/* PWA install button in header */
+.pwa-header-install {
+    display: none;
+    padding: 6px 12px;
+    background: #34a853;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* Card description text */
+.card-desc {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* Info row — label + badge side by side */
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.info-row label {
+    font-weight: 500;
+    color: #555;
+    margin: 0;
+}
+
+/* Button group — horizontal flex */
+.btn-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+/* Form select */
+.form-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.form-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Form input (for custom timer) */
+.form-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+.form-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Hidden fields */
+#customTimerGroup {
+    display: none;
+}
+#lockTimerGroup {
+    display: none;
+}
+#biometricBtnGroup {
+    display: none;
+}
+
+/* Form message */
+.form-message {
+    min-height: 20px;
+    font-size: 13px;
+    margin-top: 10px;
+    padding: 6px 0;
+}
+.form-message.success { color: #10b981; }
+.form-message.error   { color: #ef4444; }
+.form-message.info    { color: #667eea; }
+
+/* Status badge variants */
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-danger  { background: #fee2e2; color: #991b1b; }
+
+/* Checkbox group */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+}
+.checkbox-group label {
+    margin: 0;
+}
+
+/* Hint text */
+.hint-text {
+    display: block;
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 12px;
+}
+
+/* ── Settings Extras — added for PIN/biometric/timer UI ─────
+   These classes replace inline styles removed from settings.html
+────────────────────────────────────────────────────────── */
+
+/* PWA install button in header */
+.pwa-header-install {
+    display: none;
+    padding: 6px 12px;
+    background: #34a853;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* Card description text */
+.card-desc {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* Info row — label + badge side by side */
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.info-row label {
+    font-weight: 500;
+    color: #555;
+    margin: 0;
+}
+
+/* Button group — horizontal flex */
+.btn-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+/* Form select */
+.form-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.form-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Form input (for custom timer) */
+.form-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+.form-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+/* Hidden fields */
+#customTimerGroup {
+    display: none;
+}
+/* Timer group always visible once on security tab */
+#lockTimerGroup {
+    display: block;
+}
+#biometricBtnGroup {
+    display: none;
+}
+
+/* Form message */
+.form-message {
+    min-height: 20px;
+    font-size: 13px;
+    margin-top: 10px;
+    padding: 6px 0;
+}
+.form-message.success { color: #10b981; }
+.form-message.error   { color: #ef4444; }
+.form-message.info    { color: #667eea; }
+
+/* Status badge variants */
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-danger  { background: #fee2e2; color: #991b1b; }
+
+/* Checkbox group */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+}
+.checkbox-group label {
+    margin: 0;
+}
+
+/* Hint text */
+.hint-text {
+    display: block;
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 12px;
+}

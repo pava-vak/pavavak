@@ -1,9 +1,8 @@
 // User Controller
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const logger = require('../utils/logger');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // GET /api/users/me - Get current user profile
 exports.getCurrentUser = async (req, res) => {

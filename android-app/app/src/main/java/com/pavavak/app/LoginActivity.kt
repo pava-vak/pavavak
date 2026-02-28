@@ -53,6 +53,7 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(this@LoginActivity, "Login successful", Toast.LENGTH_SHORT).show()
                 AppSecurityPrefs.setDecoyModeActive(this@LoginActivity, false)
                 NotificationBootstrap.initialize(this@LoginActivity)
+                NativeApi.registerFcmTokenFromPrefs(this@LoginActivity)
                 startActivity(
                     Intent(this@LoginActivity, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

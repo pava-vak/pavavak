@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -15,6 +16,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.firebase.messaging.FirebaseMessaging
+import com.pavavak.app.nativechat.NativeApi
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 object NotificationBootstrap {
@@ -41,6 +44,10 @@ object NotificationBootstrap {
                     .edit()
                     .putString("fcm_token", token)
                     .apply()
+                activity.lifecycleScope.launch {
+                    val ok = NativeApi.registerFcmToken(token)
+                    Log.d(TAG, "FCM token backend sync success=$ok")
+                }
             }
             .addOnFailureListener { error ->
                 Log.e(TAG, "FCM token fetch failed: ${error.message}", error)

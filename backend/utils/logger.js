@@ -1,8 +1,7 @@
 // Logging Utility
 // Handles all system and user activity logging
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // Log levels
 const LogLevel = {

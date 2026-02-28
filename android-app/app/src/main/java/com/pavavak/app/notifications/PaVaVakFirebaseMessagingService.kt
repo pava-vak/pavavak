@@ -3,6 +3,10 @@ package com.pavavak.app.notifications
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.pavavak.app.nativechat.NativeApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -13,7 +17,10 @@ class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
             .edit()
             .putString("fcm_token", token)
             .apply()
-        // TODO: send token to backend after login for user-device mapping.
+        CoroutineScope(Dispatchers.IO).launch {
+            val ok = NativeApi.registerFcmToken(token)
+            Log.d("PaVaVakFCM", "FCM token refresh backend sync success=$ok")
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -25,4 +32,3 @@ class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
         NotificationHelper.showHiddenMessageNotification(this, unreadCount)
     }
 }
-

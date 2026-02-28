@@ -1,4 +1,4 @@
-const API_URL = 'https://pavavak-backend.onrender.com/api';
+const API_URL = '/api';
 
 async function checkServer() {
     const statusEl = document.getElementById('status');

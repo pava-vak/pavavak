@@ -2,95 +2,130 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
                    script-src 'self';
                    style-src 'self';
-                   connect-src 'self' http://localhost:3000;
+                   connect-src 'self' http://localhost:3000 ws://localhost:3000 wss://localhost:3000;
                    img-src 'self' data:;
                    font-src 'self';
+                   manifest-src 'self';
+                   worker-src 'self' blob:;
                    object-src 'none';">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a73e8" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PaVa-Vak" />
+    <meta name="application-name" content="PaVa-Vak" />
+    <meta name="description" content="PaVa-Vak — Settings" />
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
     <title>PaVa-Vak - Settings</title>
     <link rel="stylesheet" href="css/settings.css">
+    <link rel="stylesheet" href="css/applock.css">
 </head>
 <body>
+
+    <!-- APP LOCK OVERLAY — first element, visible by default -->
+    <div id="app-lock-overlay"></div>
+
+    <!-- Header -->
     <div class="header">
         <h1>⚙️ Settings</h1>
         <div class="header-actions">
             <button id="backToChatBtn" class="btn-secondary">← Back to Chat</button>
+            <button id="pwa-install-btn" class="pwa-header-install">📲 Install</button>
             <button id="logoutBtn" class="btn-danger">Logout</button>
         </div>
     </div>
 
     <div class="container">
+
+        <!-- Tabs -->
         <div class="tabs">
-            <button class="tab-btn active" data-tab="profile">Profile</button>
-            <button class="tab-btn" data-tab="security">Security</button>
-            <button class="tab-btn" data-tab="account">Account</button>
+            <button class="tab-btn active" data-tab="profile">👤 Profile</button>
+            <button class="tab-btn" data-tab="security">🔒 Security</button>
+            <button class="tab-btn" data-tab="notifications">🔔 Notifications</button>
+            <button class="tab-btn" data-tab="account">🗂️ Account</button>
         </div>
 
-        <!-- Profile Tab -->
+        <!-- ── Profile Tab ─────────────────────────────────── -->
         <div class="tab-content active" id="tab-profile">
             <div class="card">
                 <h2>Profile Information</h2>
-                <form id="profileForm">
+                <form id="profileForm" novalidate>
                     <div class="form-group">
                         <label for="username">Username</label>
-                        <input type="text" id="username" disabled>
+                        <input type="text" id="username" disabled autocomplete="username">
                         <small>Username cannot be changed</small>
                     </div>
-
                     <div class="form-group">
                         <label for="email">Email</label>
-                        <input type="email" id="email" disabled>
+                        <input type="email" id="email" disabled autocomplete="email" inputmode="email">
                         <small>Email cannot be changed</small>
                     </div>
-
                     <div class="form-group">
                         <label for="fullName">Full Name</label>
-                        <input type="text" id="fullName" placeholder="Enter your full name">
+                        <input type="text" id="fullName"
+                               placeholder="Enter your full name"
+                               autocomplete="name"
+                               autocapitalize="words">
                     </div>
-
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                 </form>
             </div>
         </div>
 
-        <!-- Security Tab -->
+        <!-- ── Security Tab ───────────────────────────────── -->
         <div class="tab-content" id="tab-security">
+
+            <!-- Change Password -->
             <div class="card">
                 <h2>Change Password</h2>
-                <form id="passwordForm">
+                <form id="passwordForm" novalidate>
                     <div class="form-group">
                         <label for="currentPassword">Current Password</label>
                         <div class="password-wrapper">
-                            <input type="password" id="currentPassword" required>
-                            <button type="button" class="toggle-password" data-target="currentPassword">👁️</button>
+                            <input type="password" id="currentPassword"
+                                   autocomplete="current-password" required>
+                            <button type="button" class="toggle-password"
+                                    data-target="currentPassword"
+                                    aria-label="Toggle current password visibility">👁️</button>
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label for="newPassword">New Password</label>
                         <div class="password-wrapper">
-                            <input type="password" id="newPassword" required minlength="8">
-                            <button type="button" class="toggle-password" data-target="newPassword">👁️</button>
+                            <input type="password" id="newPassword"
+                                   autocomplete="new-password" required minlength="8">
+                            <button type="button" class="toggle-password"
+                                    data-target="newPassword"
+                                    aria-label="Toggle new password visibility">👁️</button>
                         </div>
                         <small>Minimum 8 characters</small>
                     </div>
-
                     <div class="form-group">
                         <label for="confirmPassword">Confirm New Password</label>
                         <div class="password-wrapper">
-                            <input type="password" id="confirmPassword" required minlength="8">
-                            <button type="button" class="toggle-password" data-target="confirmPassword">👁️</button>
+                            <input type="password" id="confirmPassword"
+                                   autocomplete="new-password" required minlength="8">
+                            <button type="button" class="toggle-password"
+                                    data-target="confirmPassword"
+                                    aria-label="Toggle confirm password visibility">👁️</button>
                         </div>
                     </div>
-
                     <button type="submit" class="btn btn-primary">Change Password</button>
                 </form>
             </div>
 
+            <!-- Two-Factor Authentication -->
             <div class="card">
                 <h2>Two-Factor Authentication</h2>
                 <div id="twoFactorStatus">
@@ -98,9 +133,132 @@
                     <button id="toggle2FABtn" class="btn btn-secondary">Enable 2FA</button>
                 </div>
             </div>
+
+            <!-- ── App Lock — PIN + Biometric ─────────────── -->
+            <div class="card" id="appLockCard">
+                <h2>🔐 App Lock</h2>
+                <p class="card-desc">
+                    Lock the app with a PIN when you leave or your phone locks.
+                    Biometric (fingerprint/face) can be used instead of PIN if your device supports it.
+                </p>
+
+                <!-- Current status -->
+                <div class="info-row">
+                    <label>PIN Status</label>
+                    <span id="pinStatusText" class="status-badge">Not set</span>
+                </div>
+                <div class="info-row" id="biometricRow">
+                    <label>Biometric</label>
+                    <span id="biometricStatusText" class="status-badge">Not set up</span>
+                </div>
+
+                <!-- Lock Timer -->
+                <div class="form-group" id="lockTimerGroup">
+                    <label for="lockTimer">Lock after</label>
+                    <select id="lockTimer" class="form-select">
+                        <option value="0">Immediately (when phone locks / app backgrounds)</option>
+                        <option value="60">1 minute of inactivity</option>
+                        <option value="300">5 minutes of inactivity</option>
+                        <option value="900">15 minutes of inactivity</option>
+                        <option value="custom">Custom time...</option>
+                    </select>
+                </div>
+
+                <!-- Custom timer input — shown only when custom selected -->
+                <div class="form-group" id="customTimerGroup" class="hidden-field">
+                    <label for="customTimerMinutes">Custom time (minutes)</label>
+                    <input type="number" id="customTimerMinutes"
+                           min="1" max="1440" placeholder="e.g. 10"
+                           class="form-input">
+                    <button id="saveCustomTimerBtn" class="btn btn-secondary">Save</button>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="btn-group">
+                    <button id="setupPinBtn" class="btn btn-primary">Set Up PIN</button>
+                    <button id="changePinBtn" class="btn btn-secondary">Change PIN</button>
+                    <button id="removePinBtn" class="btn btn-danger">Remove PIN</button>
+                </div>
+                <div class="btn-group" id="biometricBtnGroup">
+                    <button id="setupBiometricBtn" class="btn btn-secondary">Set Up Biometric</button>
+                    <button id="removeBiometricBtn" class="btn btn-danger">Remove Biometric</button>
+                </div>
+
+                <div id="pinMessage" class="form-message"></div>
+
+                <!-- PIN Setup Overlay — full screen keypad to enter new PIN -->
+                <div id="pin-setup-overlay">
+                    <div class="lock-card">
+                        <span class="lock-icon">🔢</span>
+                        <div class="lock-title" id="pinSetupTitle">Set New PIN</div>
+                        <div class="lock-subtitle" id="pinSetupSubtitle">Enter a 4-digit PIN</div>
+
+                        <div class="pin-dots" id="pinSetupDots">
+                            <div class="pin-dot"></div>
+                            <div class="pin-dot"></div>
+                            <div class="pin-dot"></div>
+                            <div class="pin-dot"></div>
+                        </div>
+
+                        <div class="lock-error" id="pinSetupError"></div>
+
+                        <div class="pin-keypad">
+                            <button class="pin-key" onclick="pinSetupKey('1')">1</button>
+                            <button class="pin-key" onclick="pinSetupKey('2')">2</button>
+                            <button class="pin-key" onclick="pinSetupKey('3')">3</button>
+                            <button class="pin-key" onclick="pinSetupKey('4')">4</button>
+                            <button class="pin-key" onclick="pinSetupKey('5')">5</button>
+                            <button class="pin-key" onclick="pinSetupKey('6')">6</button>
+                            <button class="pin-key" onclick="pinSetupKey('7')">7</button>
+                            <button class="pin-key" onclick="pinSetupKey('8')">8</button>
+                            <button class="pin-key" onclick="pinSetupKey('9')">9</button>
+                            <button class="pin-key pin-empty" disabled></button>
+                            <button class="pin-key" onclick="pinSetupKey('0')">0</button>
+                            <button class="pin-key pin-delete" onclick="pinSetupDelete()">⌫</button>
+                        </div>
+
+                        <button class="lock-btn-secondary" onclick="closePinSetup()">Cancel</button>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
-        <!-- Account Tab -->
+        <!-- ── Notifications Tab ──────────────────────────── -->
+        <div class="tab-content" id="tab-notifications">
+            <div class="card">
+                <h2>🔔 Push Notifications</h2>
+                <p class="card-desc">
+                    Get notified of new messages even when the app is in the background.
+                </p>
+                <div class="info-row">
+                    <label>Status</label>
+                    <span id="notificationStatusText" class="status-badge">Not enabled</span>
+                </div>
+                <div class="btn-group">
+                    <button id="enableNotificationsBtn" class="btn btn-primary">Enable Notifications</button>
+                    <button id="disableNotificationsBtn" class="btn btn-secondary">Disable Notifications</button>
+                </div>
+                <small class="hint-text">You can change this at any time from your browser settings.</small>
+            </div>
+
+            <div class="card">
+                <h2>Notification Preferences</h2>
+                <form id="notificationPrefsForm">
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="notifNewMessage" checked>
+                        <label for="notifNewMessage">New messages</label>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="notifSound" checked>
+                        <label for="notifSound">Sound alerts</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Preferences</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ── Account Tab ────────────────────────────────── -->
         <div class="tab-content" id="tab-account">
             <div class="card">
                 <h2>Account Information</h2>
@@ -124,19 +282,47 @@
                 </div>
             </div>
 
+            <div class="card">
+                <h2>App Information</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Version</label>
+                        <span id="appVersion">v2.0</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Mode</label>
+                        <span id="appMode">Browser</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Service Worker</label>
+                        <span id="swStatus">Checking...</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Connection</label>
+                        <span id="connectionStatus">Online</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="card danger-zone">
                 <h2>Danger Zone</h2>
                 <p>Once you delete your account, there is no going back. Please be certain.</p>
                 <button id="deleteAccountBtn" class="btn btn-danger">Delete Account</button>
             </div>
         </div>
+
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast" class="toast">
+    <!-- Toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite">
         <p id="toastMessage"></p>
     </div>
 
+    <!-- Scripts — no inline scripts (CSP compliant) -->
+    <script src="js/applock.js"></script>
     <script src="js/settings.js"></script>
+    <script src="js/settings-extras.js"></script>
+    <script src="js/pwa.js"></script>
+
 </body>
 </html>

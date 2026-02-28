@@ -1,5 +1,4 @@
 // Authentication Controller
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const passport = require('passport');
 const speakeasy = require('speakeasy');
@@ -8,7 +7,7 @@ const logger = require('../utils/logger');
 const { sendEmail } = require('../utils/emailer');
 const { generateTOTP, verifyTOTP } = require('../utils/twoFactor');
 
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 // POST /api/auth/register - User registration with invite code
 exports.register = async (req, res) => {

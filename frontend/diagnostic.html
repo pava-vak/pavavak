@@ -2,7 +2,35 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
+    <!-- ═══════════════════════════════════════════════════════
+         CONTENT SECURITY POLICY
+         Note: diagnostic uses inline styles so we need
+               'unsafe-inline' in style-src only for this page.
+               script-src stays strict — all JS is inline here
+               but wrapped in a single script block which is
+               acceptable for an internal dev/admin tool.
+               Added: manifest-src, worker-src for PWA
+    ════════════════════════════════════════════════════════ -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline';
+                   style-src 'self' 'unsafe-inline';
+                   connect-src 'self' http://localhost:3000 ws://localhost:3000 wss://localhost:3000;
+                   img-src 'self' data:;
+                   font-src 'self';
+                   manifest-src 'self';
+                   worker-src 'self' blob:;
+                   object-src 'none';">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0d1117" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
     <title>PaVa-Vak Diagnostics</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,28 +39,39 @@
         .subtitle { color: #8b949e; margin-bottom: 30px; font-size: 13px; }
         .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 15px; }
         .card h2 { font-size: 14px; color: #8b949e; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
-        .item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; }
+        .item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; flex-wrap: wrap; gap: 8px; }
         .item:last-child { border-bottom: none; }
         .label { color: #c9d1d9; font-size: 14px; }
-        .value { font-size: 14px; }
-        .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-        .badge.ok { background: #1a4731; color: #3fb950; }
-        .badge.error { background: #4a1515; color: #f85149; }
-        .badge.warn { background: #3d2f00; color: #e3b341; }
+        .value { font-size: 14px; color: #c9d1d9; }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; white-space: nowrap; }
+        .badge.ok      { background: #1a4731; color: #3fb950; }
+        .badge.error   { background: #4a1515; color: #f85149; }
+        .badge.warn    { background: #3d2f00; color: #e3b341; }
         .badge.loading { background: #1f2937; color: #8b949e; }
-        .refresh-btn { background: #238636; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-family: monospace; font-size: 14px; margin-bottom: 20px; }
+        .badge.info    { background: #0d2137; color: #58a6ff; }
+        .header-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+        .refresh-btn { background: #238636; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-family: monospace; font-size: 14px; }
         .refresh-btn:hover { background: #2ea043; }
-        .timestamp { color: #8b949e; font-size: 12px; margin-bottom: 20px; }
+        .back-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-family: monospace; font-size: 14px; text-decoration: none; display: inline-block; }
+        .back-btn:hover { background: #30363d; }
+        .timestamp { color: #8b949e; font-size: 12px; }
         .url { color: #58a6ff; font-size: 12px; word-break: break-all; }
+        pre { color: #8b949e; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+        .section-divider { color: #8b949e; font-size: 11px; padding: 6px 0 2px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #21262d; margin-bottom: 4px; }
     </style>
 </head>
 <body>
+
     <h1>🔍 PaVa-Vak Diagnostics</h1>
     <p class="subtitle">System health check — no login required</p>
     <p class="timestamp" id="timestamp">Checking...</p>
 
-    <button class="refresh-btn" onclick="runDiagnostics()">🔄 Refresh</button>
+    <div class="header-row" style="margin-top:16px;">
+        <button class="refresh-btn" onclick="runDiagnostics()">🔄 Refresh All</button>
+        <a href="/index.html" class="back-btn">← Back to Login</a>
+    </div>
 
+    <!-- ── Server ─────────────────────────────────────────── -->
     <div class="card">
         <h2>🌐 Server</h2>
         <div class="item">
@@ -51,8 +90,21 @@
             <span class="label">Server URL</span>
             <span class="url" id="server-url">-</span>
         </div>
+        <div class="item">
+            <span class="label">Online Users</span>
+            <span class="value" id="online-users">-</span>
+        </div>
+        <div class="item">
+            <span class="label">Memory (Heap Used)</span>
+            <span class="value" id="memory-heap">-</span>
+        </div>
+        <div class="item">
+            <span class="label">Uptime</span>
+            <span class="value" id="server-uptime">-</span>
+        </div>
     </div>
 
+    <!-- ── Database ───────────────────────────────────────── -->
     <div class="card">
         <h2>🗄️ Database</h2>
         <div class="item">
@@ -69,6 +121,7 @@
         </div>
     </div>
 
+    <!-- ── Auth System ────────────────────────────────────── -->
     <div class="card">
         <h2>🔐 Auth System</h2>
         <div class="item">
@@ -79,122 +132,315 @@
             <span class="label">Login Endpoint</span>
             <span class="badge loading" id="login-status">Checking...</span>
         </div>
+        <div class="item">
+            <span class="label">Currently Logged In</span>
+            <span class="badge loading" id="auth-user">Checking...</span>
+        </div>
     </div>
 
+    <!-- ── PWA & Browser ──────────────────────────────────── -->
     <div class="card">
-        <h2>📋 Raw Response</h2>
-        <pre id="raw-output" style="color:#8b949e; font-size:12px; white-space:pre-wrap; word-break:break-all;">Waiting for diagnostics...</pre>
+        <h2>📲 PWA &amp; Browser</h2>
+        <div class="item">
+            <span class="label">Service Worker</span>
+            <span class="badge loading" id="sw-status">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">SW Cache</span>
+            <span class="badge loading" id="sw-cache">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">Manifest Loaded</span>
+            <span class="badge loading" id="manifest-status">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">PWA Install Mode</span>
+            <span class="badge loading" id="pwa-mode">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">Push Notifications</span>
+            <span class="badge loading" id="push-status">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">WebAuthn (Biometric)</span>
+            <span class="badge loading" id="webauthn-status">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">Online Status</span>
+            <span class="badge loading" id="online-status">Checking...</span>
+        </div>
+        <div class="item">
+            <span class="label">Browser</span>
+            <span class="value" id="browser-info">-</span>
+        </div>
+    </div>
+
+    <!-- ── Raw Response ───────────────────────────────────── -->
+    <div class="card">
+        <h2>📋 Raw API Response</h2>
+        <pre id="raw-output">Waiting for diagnostics...</pre>
     </div>
 
     <script>
-        const API = window.location.origin + '/api';
+    'use strict';
 
-        async function runDiagnostics() {
-            document.getElementById('timestamp').textContent = 'Last checked: ' + new Date().toLocaleTimeString();
-            
-            // Reset all to loading
-            document.querySelectorAll('.badge').forEach(b => {
-                b.className = 'badge loading';
-                b.textContent = 'Checking...';
-            });
+    const API = window.location.origin + '/api';
 
-            document.getElementById('server-url').textContent = API;
-            let rawOutput = {};
+    // ─── MAIN RUNNER ─────────────────────────────────────────
+    async function runDiagnostics() {
+        document.getElementById('timestamp').textContent =
+            'Last checked: ' + new Date().toLocaleString();
 
-            // 1. Check server + response time
-            try {
-                const start = Date.now();
-                const res = await fetch(`${API}/auth/session`, { credentials: 'include' });
-                const elapsed = Date.now() - start;
-                const data = await res.json();
-                
-                rawOutput.session = data;
-                document.getElementById('response-time').textContent = elapsed + 'ms';
-                setbadge('server-status', 'ok', '✓ Online');
-                setbadge('api-status', 'ok', '✓ Reachable');
-                setbadge('session-status', 'ok', '✓ Working');
+        // Reset all badges to loading
+        document.querySelectorAll('.badge').forEach(function (b) {
+            b.className  = 'badge loading';
+            b.textContent = 'Checking...';
+        });
 
-            } catch (err) {
-                setbadge('server-status', 'error', '✗ Offline');
-                setbadge('api-status', 'error', '✗ Unreachable');
-                setbadge('session-status', 'error', '✗ Failed');
-                rawOutput.sessionError = err.message;
+        document.getElementById('server-url').textContent = API;
+        document.getElementById('response-time').textContent = '-';
+        document.getElementById('online-users').textContent  = '-';
+        document.getElementById('memory-heap').textContent   = '-';
+        document.getElementById('server-uptime').textContent = '-';
+        document.getElementById('browser-info').textContent  = '-';
+
+        const rawOutput = {};
+
+        // Run all checks in parallel where possible
+        await Promise.allSettled([
+            checkServer(rawOutput),
+            checkDatabase(rawOutput),
+            checkLogin(rawOutput),
+            checkPWA(),
+        ]);
+
+        document.getElementById('raw-output').textContent =
+            JSON.stringify(rawOutput, null, 2);
+    }
+
+    // ─── 1. SERVER + SESSION ─────────────────────────────────
+    async function checkServer(rawOutput) {
+        try {
+            const start = Date.now();
+            const res   = await fetch(`${API}/auth/session`, { credentials: 'include' });
+            const elapsed = Date.now() - start;
+            const data  = await res.json();
+
+            rawOutput.session = data;
+
+            document.getElementById('response-time').textContent = elapsed + 'ms';
+            setBadge('server-status', 'ok', '✓ Online');
+            setBadge('api-status',    'ok', '✓ Reachable');
+            setBadge('session-status','ok', '✓ Working');
+            setBadge('auth-user',
+                data.user ? 'ok'  : 'info',
+                data.user ? '✓ ' + data.user.username : 'Not logged in'
+            );
+        } catch (err) {
+            setBadge('server-status', 'error', '✗ Offline');
+            setBadge('api-status',    'error', '✗ Unreachable');
+            setBadge('session-status','error', '✗ Failed');
+            setBadge('auth-user',     'error', '✗ Unknown');
+            rawOutput.sessionError = err.message;
+        }
+
+        // Health endpoint — grabs memory, uptime, online users
+        try {
+            const res  = await fetch(`${API}/health`, { credentials: 'include' });
+            const data = await res.json();
+            rawOutput.health = data;
+
+            if (data.memory) {
+                const mb = Math.round(data.memory.heapUsed / 1024 / 1024);
+                document.getElementById('memory-heap').textContent = mb + ' MB';
             }
-
-            // 2. Check database via diagnostic endpoint
-            try {
-                const res = await fetch(`${API}/diagnostic`, { credentials: 'include' });
-                const data = await res.json();
-                rawOutput.diagnostic = data;
-
-                if (data.database === 'connected') {
-                    setbadge('db-status', 'ok', '✓ Connected');
-                } else {
-                    setbadge('db-status', 'error', '✗ Failed');
-                }
-
-                if (data.canRead) {
-                    setbadge('db-read', 'ok', '✓ Yes');
-                } else {
-                    setbadge('db-read', 'error', '✗ No');
-                }
-
-                if (data.adminExists) {
-                    setbadge('admin-exists', 'ok', '✓ Yes');
-                } else {
-                    setbadge('admin-exists', 'warn', '⚠ Not Found');
-                }
-
-            } catch (err) {
-                // Fallback: try to infer DB status from login attempt
-                try {
-                    const res = await fetch(`${API}/auth/login`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: 'diagnostic_test_user_xyz', password: 'test' })
-                    });
-                    const data = await res.json();
-                    rawOutput.loginTest = data;
-
-                    // If we get a proper error response (not 500), DB is working
-                    if (res.status === 401 || res.status === 400 || (data.error && !data.error.includes('500'))) {
-                        setbadge('db-status', 'ok', '✓ Connected');
-                        setbadge('db-read', 'ok', '✓ Yes');
-                    } else if (res.status === 500) {
-                        setbadge('db-status', 'error', '✗ Failed');
-                        setbadge('db-read', 'error', '✗ No');
-                    }
-                    setbadge('admin-exists', 'warn', '⚠ Use /api/diagnostic');
-
-                } catch(e) {
-                    setbadge('db-status', 'error', '✗ Unknown');
-                    setbadge('db-read', 'error', '✗ Unknown');
-                    setbadge('admin-exists', 'error', '✗ Unknown');
-                }
+            if (data.uptime !== undefined) {
+                document.getElementById('server-uptime').textContent =
+                    formatUptime(data.uptime);
             }
+            if (data.onlineUsers !== undefined) {
+                document.getElementById('online-users').textContent =
+                    data.onlineUsers + ' user(s)';
+            }
+        } catch (err) {
+            rawOutput.healthError = err.message;
+        }
+    }
 
-            // 3. Check login endpoint
+    // ─── 2. DATABASE ─────────────────────────────────────────
+    async function checkDatabase(rawOutput) {
+        try {
+            const res  = await fetch(`${API}/diagnostic`, { credentials: 'include' });
+            const data = await res.json();
+            rawOutput.diagnostic = data;
+
+            setBadge('db-status',    data.database === 'connected' ? 'ok' : 'error',
+                                     data.database === 'connected' ? '✓ Connected' : '✗ Failed');
+            setBadge('db-read',      data.canRead  ? 'ok' : 'error',
+                                     data.canRead  ? '✓ Yes' : '✗ No');
+            setBadge('admin-exists', data.adminExists ? 'ok' : 'warn',
+                                     data.adminExists ? '✓ Yes' : '⚠ Not Found');
+        } catch (err) {
+            // Fallback: infer DB from login response
             try {
-                const res = await fetch(`${API}/auth/login`, {
-                    method: 'POST',
+                const res  = await fetch(`${API}/auth/login`, {
+                    method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: '', password: '' })
+                    body:    JSON.stringify({ username: '_diag_test_', password: 'test' }),
                 });
-                setbadge('login-status', res.status !== 500 ? 'ok' : 'error', res.status !== 500 ? '✓ Working' : '✗ Error 500');
-            } catch(e) {
-                setBadge('login-status', 'error', '✗ Failed');
+                const data = await res.json();
+                rawOutput.dbFallback = data;
+
+                const dbOk = res.status === 401 || res.status === 400;
+                setBadge('db-status',    dbOk ? 'ok'   : 'error', dbOk ? '✓ Connected' : '✗ Failed');
+                setBadge('db-read',      dbOk ? 'ok'   : 'error', dbOk ? '✓ Yes' : '✗ No');
+                setBadge('admin-exists', 'warn', '⚠ Use /api/diagnostic');
+            } catch (e) {
+                setBadge('db-status',    'error', '✗ Unknown');
+                setBadge('db-read',      'error', '✗ Unknown');
+                setBadge('admin-exists', 'error', '✗ Unknown');
+                rawOutput.dbError = e.message;
             }
+        }
+    }
 
-            document.getElementById('raw-output').textContent = JSON.stringify(rawOutput, null, 2);
+    // ─── 3. LOGIN ENDPOINT ───────────────────────────────────
+    async function checkLogin(rawOutput) {
+        try {
+            const res = await fetch(`${API}/auth/login`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ username: '', password: '' }),
+            });
+            rawOutput.loginEndpoint = { status: res.status };
+            setBadge('login-status',
+                res.status !== 500 ? 'ok' : 'error',
+                res.status !== 500 ? '✓ Working (' + res.status + ')' : '✗ Error 500'
+            );
+        } catch (e) {
+            setBadge('login-status', 'error', '✗ Failed');
+            rawOutput.loginError = e.message;
+        }
+    }
+
+    // ─── 4. PWA & BROWSER CHECKS ─────────────────────────────
+    async function checkPWA() {
+
+        // Service Worker
+        if ('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.getRegistration('/');
+                if (reg) {
+                    const state = reg.active ? 'active' :
+                                  reg.installing ? 'installing' :
+                                  reg.waiting ? 'waiting' : 'registered';
+                    setBadge('sw-status', 'ok', '✓ ' + state);
+                } else {
+                    setBadge('sw-status', 'warn', '⚠ Not registered');
+                }
+            } catch (e) {
+                setBadge('sw-status', 'error', '✗ Error');
+            }
+        } else {
+            setBadge('sw-status', 'error', '✗ Not supported');
         }
 
-        function setbadge(id, type, text) {
-            const el = document.getElementById(id);
-            el.className = 'badge ' + type;
-            el.textContent = text;
+        // Cache Storage
+        if ('caches' in window) {
+            try {
+                const keys = await caches.keys();
+                setBadge('sw-cache',
+                    keys.length > 0 ? 'ok' : 'warn',
+                    keys.length > 0 ? '✓ ' + keys.join(', ') : '⚠ Empty'
+                );
+            } catch (e) {
+                setBadge('sw-cache', 'error', '✗ Error');
+            }
+        } else {
+            setBadge('sw-cache', 'error', '✗ Not supported');
         }
 
-        runDiagnostics();
+        // Manifest
+        const manifestLink = document.querySelector('link[rel="manifest"]');
+        if (manifestLink) {
+            try {
+                const res = await fetch('/manifest.json');
+                setBadge('manifest-status', res.ok ? 'ok' : 'error',
+                    res.ok ? '✓ Loaded (200)' : '✗ ' + res.status);
+            } catch (e) {
+                setBadge('manifest-status', 'error', '✗ Failed');
+            }
+        } else {
+            setBadge('manifest-status', 'error', '✗ No link tag');
+        }
+
+        // PWA Install mode
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                          || window.navigator.standalone === true;
+        setBadge('pwa-mode', isStandalone ? 'ok' : 'info',
+            isStandalone ? '✓ Installed PWA' : 'ℹ Browser tab');
+
+        // Push Notifications
+        if ('Notification' in window && 'PushManager' in window) {
+            const perm = Notification.permission;
+            setBadge('push-status',
+                perm === 'granted' ? 'ok' : perm === 'denied' ? 'error' : 'warn',
+                perm === 'granted' ? '✓ Granted' :
+                perm === 'denied'  ? '✗ Blocked' : '⚠ Not requested'
+            );
+        } else {
+            setBadge('push-status', 'error', '✗ Not supported');
+        }
+
+        // WebAuthn / Biometric
+        if (window.PublicKeyCredential) {
+            try {
+                const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                setBadge('webauthn-status', available ? 'ok' : 'warn',
+                    available ? '✓ Available' : '⚠ Not available on device');
+            } catch (e) {
+                setBadge('webauthn-status', 'warn', '⚠ Supported but untested');
+            }
+        } else {
+            setBadge('webauthn-status', 'error', '✗ Not supported');
+        }
+
+        // Online status
+        setBadge('online-status', navigator.onLine ? 'ok' : 'error',
+            navigator.onLine ? '✓ Online' : '✗ Offline');
+
+        // Browser info
+        const ua = navigator.userAgent;
+        const browser =
+            ua.includes('Edg/')     ? 'Edge' :
+            ua.includes('Chrome/')  ? 'Chrome' :
+            ua.includes('Firefox/') ? 'Firefox' :
+            ua.includes('Safari/')  ? 'Safari' : 'Unknown';
+        const mobile = /android|iphone|ipad/i.test(ua);
+        document.getElementById('browser-info').textContent =
+            browser + (mobile ? ' (Mobile)' : ' (Desktop)');
+    }
+
+    // ─── HELPERS ─────────────────────────────────────────────
+    function setBadge(id, type, text) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className  = 'badge ' + type;
+        el.textContent = text;
+    }
+
+    function formatUptime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        return h + 'h ' + m + 'm ' + s + 's';
+    }
+
+    // ─── AUTO REFRESH ────────────────────────────────────────
+    // Refresh every 30 seconds while page is open
+    runDiagnostics();
+    setInterval(runDiagnostics, 30000);
+
     </script>
 </body>
 </html>
