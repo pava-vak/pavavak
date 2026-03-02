@@ -34,6 +34,9 @@ model users {
   login_attempts          login_attempts[]
   password_reset_requests password_reset_requests[]
   device_tokens           device_tokens[]
+  presence                user_presence?
+  typing_sent             typing_status[]             @relation("TypingFromUser")
+  typing_received         typing_status[]             @relation("TypingToUser")
 }
 
 // Device tokens for FCM push notifications
@@ -177,4 +180,34 @@ model password_reset_requests {
   resolved_at DateTime?
 
   user users @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+// User presence heartbeat state
+model user_presence {
+  user_id           Int      @id
+  is_online         Boolean  @default(false)
+  last_seen_at      DateTime @default(now())
+  last_heartbeat_at DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([is_online, updated_at])
+}
+
+// Ephemeral typing status between users
+model typing_status {
+  id           Int      @id @default(autoincrement())
+  from_user_id Int
+  to_user_id   Int
+  is_typing    Boolean  @default(false)
+  updated_at   DateTime @default(now())
+  expires_at   DateTime
+
+  from_user users @relation("TypingFromUser", fields: [from_user_id], references: [user_id], onDelete: Cascade)
+  to_user   users @relation("TypingToUser", fields: [to_user_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([from_user_id, to_user_id])
+  @@index([to_user_id, from_user_id, expires_at])
+  @@index([expires_at])
 }

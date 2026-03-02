@@ -160,6 +160,8 @@ app.use('/api/invites', require('./routes/invites'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/diagnostic', require('./routes/diagnostic'));
 app.use('/api/mobile', require('./routes/mobile'));
+app.use('/api/presence', require('./routes/presence'));
+app.use('/api/typing', require('./routes/typing'));
 
 // =====================
 // PUSH NOTIFICATIONS (Web Push / PWA)
@@ -337,6 +339,15 @@ io.on('connection', (socket) => {
   socket.userId = userId;
   onlineUsers.set(userId, socket.id);
   socket.join(`user_${userId}`);
+  prisma.$executeRaw`
+    INSERT INTO user_presence (user_id, is_online, last_heartbeat_at, updated_at)
+    VALUES (${userId}, true, NOW(), NOW())
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      is_online = true,
+      last_heartbeat_at = NOW(),
+      updated_at = NOW()
+  `.catch(() => {});
 
   io.emit('user_status', { userId, status: 'online' });
 
@@ -380,6 +391,15 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     onlineUsers.delete(userId);
+    prisma.$executeRaw`
+      INSERT INTO user_presence (user_id, is_online, last_seen_at, last_heartbeat_at, updated_at)
+      VALUES (${userId}, false, NOW(), NOW(), NOW())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        is_online = false,
+        last_seen_at = NOW(),
+        updated_at = NOW()
+    `.catch(() => {});
     io.emit('user_status', { userId, status: 'offline' });
   });
 
@@ -465,6 +485,21 @@ setInterval(async () => {
     console.error('[DB KEEPALIVE] Failed:', e.message);
   }
 }, 4 * 60 * 1000);
+
+// =====================
+// TYPING STATUS CLEANUP
+// =====================
+setInterval(async () => {
+  try {
+    await prisma.$executeRaw`
+      UPDATE typing_status
+      SET is_typing = false, updated_at = NOW()
+      WHERE is_typing = true AND expires_at <= NOW()
+    `;
+  } catch (e) {
+    console.error('[TYPING CLEANUP] Failed:', e.message);
+  }
+}, 30 * 1000);
 
 // =====================
 // START SERVER
