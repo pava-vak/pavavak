@@ -1,29 +1,39 @@
-﻿package com.pavavak.app.nativechat
+package com.pavavak.app.nativechat
 
+import android.graphics.BitmapFactory
+import android.content.res.ColorStateList
+import android.util.Base64
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.pavavak.app.R
+import com.pavavak.app.ThemeManager
+import kotlin.math.roundToInt
 
 class MessageAdapter(
     private val items: MutableList<ChatMessage>,
-    private val onLongPress: (ChatMessage) -> Unit
+    private val onLongPress: (ChatMessage) -> Unit,
+    private val onRetryTap: (ChatMessage) -> Unit
 ) : RecyclerView.Adapter<MessageAdapter.MessageVH>() {
+    private enum class ImageLoadState { NONE, THUMBNAIL, FULL }
 
     private var selectionMode = false
     private val selectedIds = linkedSetOf<String>()
+    private val imageStates = mutableMapOf<String, ImageLoadState>()
 
     class MessageVH(view: View) : RecyclerView.ViewHolder(view) {
         val rowRoot: LinearLayout = view.findViewById(R.id.rowRoot)
         val bubble: LinearLayout = view.findViewById(R.id.messageBubble)
         val reply: TextView = view.findViewById(R.id.replyText)
         val body: TextView = view.findViewById(R.id.messageText)
+        val image: ImageView = view.findViewById(R.id.messageImage)
         val reaction: TextView = view.findViewById(R.id.reactionText)
         val meta: TextView = view.findViewById(R.id.messageMeta)
         val ticks: TextView = view.findViewById(R.id.messageTicks)
@@ -37,9 +47,13 @@ class MessageAdapter(
 
     override fun onBindViewHolder(holder: MessageVH, position: Int) {
         val item = items[position]
+        val palette = ThemeManager.getChatColors(holder.itemView.context)
 
         holder.rowRoot.gravity = if (item.isMine) Gravity.END else Gravity.START
         holder.bubble.setBackgroundResource(if (item.isMine) R.drawable.bg_bubble_mine else R.drawable.bg_bubble_other)
+        holder.bubble.backgroundTintList = ColorStateList.valueOf(
+            if (item.isMine) palette.mineBubble else palette.otherBubble
+        )
         holder.body.setTextColor(
             ContextCompat.getColor(
                 holder.itemView.context,
@@ -50,18 +64,52 @@ class MessageAdapter(
         holder.reply.visibility = if (item.replyPreview.isNullOrBlank()) View.GONE else View.VISIBLE
         holder.reply.text = item.replyPreview ?: ""
 
-        holder.body.text = item.text
+        val imageBase64 = extractInlineImageBase64(item.text)
+        if (imageBase64 != null) {
+            val state = imageStates[item.id] ?: ImageLoadState.NONE
+            if (state == ImageLoadState.NONE) {
+                holder.image.visibility = View.GONE
+                holder.image.setImageDrawable(null)
+                holder.body.visibility = View.VISIBLE
+                holder.body.text = "Image received - tap to preview"
+            } else {
+                val decoded = decodeInlineImage(
+                    base64 = imageBase64,
+                    maxDimension = if (state == ImageLoadState.THUMBNAIL) 280 else 1600
+                )
+                if (decoded != null) {
+                    holder.body.visibility = View.VISIBLE
+                    holder.body.text = if (state == ImageLoadState.THUMBNAIL) {
+                        "Preview loaded - tap to download full image"
+                    } else {
+                        "Full image loaded"
+                    }
+                    holder.image.visibility = View.VISIBLE
+                    holder.image.setImageBitmap(decoded)
+                } else {
+                    holder.image.visibility = View.GONE
+                    holder.image.setImageDrawable(null)
+                    holder.body.visibility = View.VISIBLE
+                    holder.body.text = "Image unavailable"
+                }
+            }
+        } else {
+            holder.image.visibility = View.GONE
+            holder.image.setImageDrawable(null)
+            holder.body.visibility = View.VISIBLE
+            holder.body.text = item.text
+        }
         if (item.isMine) {
             holder.meta.text = item.time
-            holder.meta.setTextColor(
-                ContextCompat.getColor(
-                    holder.itemView.context,
-                    when {
-                        item.time == "failed" -> android.R.color.holo_red_dark
-                        else -> R.color.text_secondary
-                    }
+            if (item.time == "failed") {
+                holder.meta.setTextColor(
+                    ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
                 )
-            )
+            } else {
+                // Keep meta/ticks readable on dark blue sent bubble.
+                val white = ContextCompat.getColor(holder.itemView.context, android.R.color.white)
+                holder.meta.setTextColor(adjustAlpha(white, 0.88f))
+            }
             holder.ticks.visibility = View.VISIBLE
             when {
                 item.time == "failed" -> {
@@ -71,22 +119,28 @@ class MessageAdapter(
                     )
                 }
                 item.time == "sending..." -> {
-                    holder.ticks.text = "✓"
+                    holder.ticks.text = "..."
                     holder.ticks.setTextColor(
-                        ContextCompat.getColor(holder.itemView.context, R.color.text_secondary)
+                        adjustAlpha(ContextCompat.getColor(holder.itemView.context, android.R.color.white), 0.72f)
+                    )
+                }
+                item.time == "queued" -> {
+                    holder.ticks.text = "Q"
+                    holder.ticks.setTextColor(
+                        adjustAlpha(ContextCompat.getColor(holder.itemView.context, android.R.color.white), 0.82f)
                     )
                 }
                 item.isRead -> {
-                    holder.ticks.text = "✓✓"
+                    holder.ticks.text = "\u2713\u2713"
                     holder.ticks.setTextColor(
                         ContextCompat.getColor(holder.itemView.context, R.color.accent_primary)
                     )
                 }
                 else -> {
                     // Any non-sending server message is treated as delivered in UI.
-                    holder.ticks.text = "✓✓"
+                    holder.ticks.text = "\u2713\u2713"
                     holder.ticks.setTextColor(
-                        ContextCompat.getColor(holder.itemView.context, R.color.text_secondary)
+                        adjustAlpha(ContextCompat.getColor(holder.itemView.context, android.R.color.white), 0.82f)
                     )
                 }
             }
@@ -114,6 +168,20 @@ class MessageAdapter(
         holder.itemView.setOnClickListener {
             if (selectionMode) {
                 toggleSelection(item.id)
+                return@setOnClickListener
+            }
+            if (imageBase64 != null) {
+                val current = imageStates[item.id] ?: ImageLoadState.NONE
+                imageStates[item.id] = when (current) {
+                    ImageLoadState.NONE -> ImageLoadState.THUMBNAIL
+                    ImageLoadState.THUMBNAIL -> ImageLoadState.FULL
+                    ImageLoadState.FULL -> ImageLoadState.FULL
+                }
+                notifyItemChanged(position)
+                return@setOnClickListener
+            }
+            if (item.isMine && (item.time == "failed" || item.time == "queued")) {
+                onRetryTap(item)
             }
         }
 
@@ -175,4 +243,33 @@ class MessageAdapter(
         selectionMode = false
         notifyDataSetChanged()
     }
+
+    private fun adjustAlpha(color: Int, factor: Float): Int {
+        val alpha = (android.graphics.Color.alpha(color) * factor).roundToInt()
+        val red = android.graphics.Color.red(color)
+        val green = android.graphics.Color.green(color)
+        val blue = android.graphics.Color.blue(color)
+        return android.graphics.Color.argb(alpha, red, green, blue)
+    }
+
+    private fun decodeInlineImage(base64: String, maxDimension: Int): android.graphics.Bitmap? {
+        return try {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                null
+            } else {
+                var sample = 1
+                while ((bounds.outWidth / sample) > maxDimension || (bounds.outHeight / sample) > maxDimension) {
+                    sample *= 2
+                }
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
 }
+

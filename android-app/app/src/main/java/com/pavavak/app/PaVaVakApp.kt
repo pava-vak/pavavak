@@ -9,8 +9,10 @@ import android.view.WindowManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.pavavak.app.data.local.LocalDatabaseProvider
 import com.pavavak.app.nativechat.NativeApi
 import com.pavavak.app.notifications.NotificationHelper
+import com.pavavak.app.sync.PendingSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,7 +31,11 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onCreate() {
         super.onCreate()
+        // Ensure notification channels exist even before any activity UI opens.
+        NotificationHelper.ensureChannels(this)
         ThemeManager.apply(this)
+        LocalDatabaseProvider.get(this)
+        PendingSyncScheduler.ensurePeriodic(this)
         registerActivityLifecycleCallbacks(this)
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(
@@ -160,7 +166,8 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
                     val session = NativeApi.getSession()
                     if (session.authenticated) {
                         val unread = NativeApi.getTotalUnreadCount()
-                        NotificationHelper.showHiddenMessageNotification(this@PaVaVakApp, unread)
+                        val hint = if (unread > 0) NativeApi.getUnreadNotificationHint() else null
+                        NotificationHelper.showHiddenMessageNotification(this@PaVaVakApp, unread, hint)
                     }
                 } catch (_: Exception) {
                 }

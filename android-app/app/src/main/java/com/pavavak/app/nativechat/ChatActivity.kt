@@ -200,7 +200,7 @@ class ChatActivity : AppCompatActivity() {
             return
         }
         startAutoRefresh()
-        PendingSyncScheduler.enqueueNow(this)
+        enqueuePendingIfAny()
         updateToolbarPresence(messages)
         lifecycleScope.launch { refreshMessagesSilently() }
     }
@@ -246,7 +246,6 @@ class ChatActivity : AppCompatActivity() {
                 updateToolbarPresence(cached)
             }
 
-            PendingSyncScheduler.enqueueNow(this@ChatActivity)
             val list = NativeApi.getMessages(otherUserId)
             Log.d(tag, "loadMessages serverCount=${list.size} pendingCount=${pendingMessages.size}")
             val signature = buildServerSignature(list)
@@ -285,7 +284,6 @@ class ChatActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             try {
-            PendingSyncScheduler.enqueueNow(this@ChatActivity)
             val list = NativeApi.getMessages(otherUserId)
             Log.d(tag, "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size}")
             val signature = buildServerSignature(list)
@@ -321,6 +319,17 @@ class ChatActivity : AppCompatActivity() {
             while (true) {
                 delay(3500)
                 refreshMessagesSilently()
+            }
+        }
+    }
+
+    private fun enqueuePendingIfAny() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                val pending = localStore.readPendingMessages(otherUserId)
+                if (pending.isNotEmpty()) {
+                    PendingSyncScheduler.enqueueNow(this@ChatActivity)
+                }
             }
         }
     }

@@ -353,8 +353,9 @@ object NativeApi {
         json.optBoolean("success", false)
     }
 
-    suspend fun deleteMessage(messageId: String): Boolean = withContext(Dispatchers.IO) {
-        val json = request("DELETE", "/api/messages/$messageId") ?: return@withContext false
+    suspend fun deleteMessage(messageId: String, scope: String = "all"): Boolean = withContext(Dispatchers.IO) {
+        val normalizedScope = if (scope.equals("me", ignoreCase = true)) "me" else "all"
+        val json = request("DELETE", "/api/messages/$messageId?scope=$normalizedScope") ?: return@withContext false
         json.optBoolean("success", false)
     }
 

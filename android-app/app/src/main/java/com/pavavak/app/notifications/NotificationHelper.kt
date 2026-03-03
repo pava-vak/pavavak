@@ -22,15 +22,16 @@ object NotificationHelper {
         val channel = NotificationChannel(
             CHANNEL_ID_MESSAGES,
             "Secure Messages",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Message alerts with hidden content"
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            setShowBadge(true)
         }
         manager.createNotificationChannel(channel)
     }
 
-    fun showHiddenMessageNotification(context: Context, unreadCount: Int) {
+    fun showHiddenMessageNotification(context: Context, unreadCount: Int, hintText: String? = null) {
         if (unreadCount <= 0) {
             NotificationManagerCompat.from(context).cancel(NOTIF_ID_MESSAGES)
             return
@@ -46,17 +47,20 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val privateText = hintText?.takeIf { it.isNotBlank() } ?: "You have new messages"
+        val publicText = hintText?.takeIf { it.isNotBlank() } ?: "New message"
+
         val publicVersion = NotificationCompat.Builder(context, CHANNEL_ID_MESSAGES)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("PaVaVak")
-            .setContentText("New message")
+            .setContentText(publicText)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
         val notif = NotificationCompat.Builder(context, CHANNEL_ID_MESSAGES)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("PaVaVak")
-            .setContentText("You have new messages")
+            .setContentText(privateText)
             .setStyle(NotificationCompat.BigTextStyle().bigText("Open app to view new messages."))
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -69,4 +73,3 @@ object NotificationHelper {
         NotificationManagerCompat.from(context).notify(NOTIF_ID_MESSAGES, notif)
     }
 }
-

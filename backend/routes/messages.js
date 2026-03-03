@@ -422,6 +422,8 @@ router.delete('/:messageId', isAuthenticated, async (req, res) => {
     try {
         const messageId = parseInt(req.params.messageId);
         const userId    = req.user.user_id;
+        const scopeRaw  = (req.query.scope || 'all').toString().toLowerCase();
+        const scope     = scopeRaw === 'me' ? 'me' : 'all';
 
         const message = await prisma.messages.findUnique({
             where: { message_id: messageId }
@@ -438,21 +440,40 @@ router.delete('/:messageId', isAuthenticated, async (req, res) => {
             return res.status(403).json({ success: false, error: 'Not authorized' });
         }
 
-        // Soft delete — only hide for the requester
-        await prisma.messages.update({
-            where: { message_id: messageId },
-            data:  isSender
-                ? { deleted_for_sender:   true }
-                : { deleted_for_receiver: true }
-        });
-
-        // Only notify the deleting user — other side unchanged
         const io = req.app.get('io');
-        if (io) {
-            io.to(`user_${userId}`).emit('message_deleted', {
-                messageId,
-                deletedForEveryone: false
+        if (scope === 'all') {
+            await prisma.messages.update({
+                where: { message_id: messageId },
+                data: {
+                    deleted_for_sender: true,
+                    deleted_for_receiver: true
+                }
             });
+
+            if (io) {
+                io.to(`user_${message.sender_id}`).emit('message_deleted', {
+                    messageId,
+                    deletedForEveryone: true
+                });
+                io.to(`user_${message.receiver_id}`).emit('message_deleted', {
+                    messageId,
+                    deletedForEveryone: true
+                });
+            }
+        } else {
+            await prisma.messages.update({
+                where: { message_id: messageId },
+                data: isSender
+                    ? { deleted_for_sender: true }
+                    : { deleted_for_receiver: true }
+            });
+
+            if (io) {
+                io.to(`user_${userId}`).emit('message_deleted', {
+                    messageId,
+                    deletedForEveryone: false
+                });
+            }
         }
 
         res.json({ success: true });
@@ -498,3 +519,4 @@ router.delete('/conversation/:otherUserId/clear', isAuthenticated, async (req, r
 });
 
 module.exports = router;
+
