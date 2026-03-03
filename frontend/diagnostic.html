@@ -16,7 +16,7 @@
           content="default-src 'self';
                    script-src 'self' 'unsafe-inline';
                    style-src 'self' 'unsafe-inline';
-                   connect-src 'self' http://localhost:3000 ws://localhost:3000 wss://localhost:3000;
+                   connect-src 'self' https://pavavak-750508954318.asia-south1.run.app wss://pavavak-750508954318.asia-south1.run.app;
                    img-src 'self' data:;
                    font-src 'self';
                    manifest-src 'self';
@@ -189,7 +189,16 @@
     // ─── MAIN RUNNER ─────────────────────────────────────────
     async function runDiagnostics() {
         document.getElementById('timestamp').textContent =
-            'Last checked: ' + new Date().toLocaleString();
+            'Last checked (IST): ' + new Date().toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
 
         // Reset all badges to loading
         document.querySelectorAll('.badge').forEach(function (b) {
