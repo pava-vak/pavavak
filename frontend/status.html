@@ -199,7 +199,7 @@
 <body>
 
 <h1>🖥 PaVa-Vak Server Monitor</h1>
-<p class="subtitle">Auto-refreshes every 10 seconds • All times UTC</p>
+<p class="subtitle">Auto-refreshes every 10 seconds • All times IST</p>
 
 <!-- Secret key input -->
 <div class="card" style="margin-bottom:16px;">
@@ -215,7 +215,7 @@
 
 <!-- Offline banner -->
 <div class="offline-banner" id="offlineBanner">
-  ⚠️ SERVER NOT RESPONDING — Cannot reach http://144.24.129.194:3000<br>
+  ⚠️ SERVER NOT RESPONDING — Cannot reach https://pavavak-750508954318.asia-south1.run.app<br>
   <small style="color:#8b949e">You may need to reboot from Oracle Cloud Console</small>
 </div>
 
@@ -309,9 +309,19 @@
 </div>
 
 <script>
-const SERVER = 'http://144.24.129.194:3000';
+const SERVER = 'https://pavavak-750508954318.asia-south1.run.app';
 let autoRefresh = null;
 let currentTab  = 'error';
+
+function formatISTTime(date = new Date()) {
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata'
+  });
+}
 
 function key() { return document.getElementById('secretKey').value.trim(); }
 
@@ -343,7 +353,7 @@ async function loadStatus() {
     banner.classList.remove('show');
     dot.className         = 'dot';
     connEl.textContent    = 'Connected';
-    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+    document.getElementById('lastUpdated').textContent = formatISTTime();
 
     // Uptime
     document.getElementById('uptimeVal').textContent = d.uptime?.human || '—';
@@ -382,7 +392,7 @@ async function loadStatus() {
     dot.className = 'dot red';
     connEl.textContent = 'Server not responding';
     banner.classList.add('show');
-    document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+    document.getElementById('lastUpdated').textContent = formatISTTime();
   }
 }
 
