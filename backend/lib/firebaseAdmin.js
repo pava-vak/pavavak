@@ -47,7 +47,7 @@ async function sendPushNotification(token, data = {}) {
             android: {
                 priority: 'high',
                 notification: {
-                    channelId: 'pavavak_messages',
+                    channelId: 'messages_secure',
                     title:     'PaVa-Vak',
                     body:      'You have a new message'
                 }
