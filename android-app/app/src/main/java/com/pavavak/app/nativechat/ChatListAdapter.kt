@@ -18,6 +18,7 @@ class ChatListAdapter(
         val avatar: TextView = view.findViewById(R.id.chatAvatar)
         val name: TextView = view.findViewById(R.id.chatName)
         val message: TextView = view.findViewById(R.id.chatLastMessage)
+        val ticks: TextView = view.findViewById(R.id.chatLastTicks)
         val time: TextView = view.findViewById(R.id.chatTime)
         val unreadBadge: TextView = view.findViewById(R.id.chatUnreadBadge)
     }
@@ -33,6 +34,16 @@ class ChatListAdapter(
         holder.name.text = item.name
         holder.message.text = item.lastMessage
         holder.time.text = item.lastTime
+
+        if (item.lastIsFromMe && item.lastMessage.isNotBlank()) {
+            holder.ticks.visibility = View.VISIBLE
+            holder.ticks.text = "\u2713\u2713"
+            val color = if (item.lastIsRead) R.color.accent_primary else R.color.text_secondary
+            holder.ticks.setTextColor(ContextCompat.getColor(holder.itemView.context, color))
+        } else {
+            holder.ticks.visibility = View.GONE
+        }
+
         if (item.unreadCount > 0) {
             holder.unreadBadge.visibility = View.VISIBLE
             holder.unreadBadge.text = item.unreadCount.coerceAtMost(99).toString()

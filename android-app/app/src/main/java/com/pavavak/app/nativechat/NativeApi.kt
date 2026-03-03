@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -39,6 +40,10 @@ object NativeApi {
 
     private val baseUrl: String = BuildConfig.BASE_URL.trimEnd('/')
     private const val TAG = "PaVaVakApi"
+    private val IST_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
+    private val IST_TIME_FORMAT: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("h:mm a", Locale("en", "IN"))
+
     fun baseUrl(): String = baseUrl
 
     suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
@@ -152,8 +157,21 @@ object NativeApi {
             val displayName = if (fullName.isNotBlank() && fullName != "null") fullName else username
 
             val last = c.optJSONObject("lastMessage")
-            val content = last?.optString("content", "") ?: ""
+            val contentRaw = last?.optString("content", "") ?: ""
+            val wire = decodeWirePayload(contentRaw)
+            val content = when {
+                wire?.type == "reaction" -> {
+                    val emoji = wire.reactionEmoji?.ifBlank { "removed reaction" } ?: "reacted"
+                    "Reaction: $emoji"
+                }
+                wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() -> "Photo"
+                wire?.type == "chat" && !wire.text.isNullOrBlank() -> wire.text
+                else -> inlineMessagePreview(contentRaw)
+            }
             val sentAt = last?.optString("sentAt", "") ?: ""
+            val isFromMe = last?.optBoolean("isFromMe", false) ?: false
+            val isRead = last?.optBoolean("isRead", false) ?: false
+            val isDelivered = last?.optBoolean("isDelivered", false) ?: false
             val unreadCount = c.optInt("unreadCount", 0)
 
             list.add(
@@ -162,11 +180,15 @@ object NativeApi {
                     name = displayName,
                     lastMessage = content,
                     lastTime = formatTime(sentAt),
-                    unreadCount = unreadCount
+                    unreadCount = unreadCount,
+                    lastIsFromMe = isFromMe,
+                    lastIsDelivered = isDelivered,
+                    lastIsRead = isRead,
+                    lastSentAtEpochMs = parseEpochMillis(sentAt)
                 )
             )
         }
-        list
+        list.sortedByDescending { it.lastSentAtEpochMs }
     }
 
     suspend fun getTotalUnreadCount(): Int = withContext(Dispatchers.IO) {
@@ -181,42 +203,17 @@ object NativeApi {
         total
     }
 
+    suspend fun getUnreadNotificationHint(): String? = withContext(Dispatchers.IO) {
+        val conversations = getConversations()
+        val hasUnreadPhoto = conversations.any { it.unreadCount > 0 && it.lastMessage.equals("Photo", ignoreCase = true) }
+        if (hasUnreadPhoto) "File sent" else null
+    }
+
     suspend fun getMessages(otherUserId: Int): List<ChatMessage> = withContext(Dispatchers.IO) {
         val session = getSession()
         if (!session.authenticated) {
             Log.w(TAG, "getMessages aborted: session not authenticated")
             return@withContext emptyList()
-        }
-
-        // Admin fallback: use admin conversation API so moderation-side history
-        // is visible even if user-side soft-delete filters hide rows.
-        if (session.isAdmin) {
-            val adminJson = request("GET", "/api/messages/admin/conversation/${session.userId}/$otherUserId")
-            if (adminJson != null && adminJson.optBoolean("success", false)) {
-                val adminArr = adminJson.optJSONArray("messages") ?: JSONArray()
-                val adminList = mutableListOf<ChatMessage>()
-                for (i in 0 until adminArr.length()) {
-                    val m = adminArr.optJSONObject(i) ?: continue
-                    val messageId = m.optInt("messageId", m.optInt("message_id", 0))
-                    val senderId = m.optInt("senderId", m.optInt("sender_id", 0))
-                    val content = m.optString("content", m.optString("message", ""))
-                    val sentAt = m.optString("sentAt", m.optString("sent_at", ""))
-                    adminList.add(
-                        ChatMessage(
-                            id = messageId.toString(),
-                            isMine = senderId == session.userId,
-                            text = content,
-                            time = formatTime(sentAt),
-                            isDelivered = m.optBoolean("isDelivered", m.optBoolean("is_delivered", false)),
-                            isRead = m.optBoolean("isRead", m.optBoolean("is_read", false))
-                        )
-                    )
-                }
-                Log.d(TAG, "getMessages admin endpoint count=${adminList.size} otherUserId=$otherUserId")
-                return@withContext adminList
-            } else {
-                Log.w(TAG, "getMessages admin endpoint failed/empty otherUserId=$otherUserId body=$adminJson")
-            }
         }
 
         val json = request("GET", "/api/messages/$otherUserId")
@@ -231,31 +228,76 @@ object NativeApi {
 
         val arr = json.optJSONArray("messages") ?: JSONArray()
         val list = mutableListOf<ChatMessage>()
+        val byId = linkedMapOf<String, ChatMessage>()
         for (i in 0 until arr.length()) {
             val m = arr.optJSONObject(i) ?: continue
             val messageId = m.optInt("messageId", m.optInt("message_id", 0))
             val senderId = m.optInt("senderId", m.optInt("sender_id", 0))
-            val content = m.optString("content", m.optString("message", ""))
+            val contentRaw = m.optString("content", m.optString("message", ""))
             val sentAt = m.optString("sentAt", m.optString("sent_at", ""))
+            val wire = decodeWirePayload(contentRaw)
+
+            if (wire?.type == "reaction") {
+                val targetId = wire.reactionTargetId
+                if (!targetId.isNullOrBlank()) {
+                    val target = byId[targetId] ?: list.firstOrNull { it.id == targetId }
+                    if (target != null) {
+                        target.reaction = wire.reactionEmoji?.ifBlank { null }
+                    }
+                }
+                continue
+            }
+
+            val displayText = when {
+                wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
+                    INLINE_IMAGE_PREFIX + wire.imageBase64
+                wire?.type == "chat" && !wire.text.isNullOrBlank() ->
+                    wire.text
+                else -> contentRaw
+            }
+
             list.add(
                 ChatMessage(
                     id = messageId.toString(),
                     isMine = senderId == session.userId,
-                    text = content,
+                    text = displayText,
                     time = formatTime(sentAt),
                     isDelivered = m.optBoolean("isDelivered", m.optBoolean("is_delivered", false)),
-                    isRead = m.optBoolean("isRead", m.optBoolean("is_read", false))
+                    isRead = m.optBoolean("isRead", m.optBoolean("is_read", false)),
+                    replyPreview = wire?.replyPreview?.let(::inlineMessagePreview)
+                        ?: extractReplyPreview(m)?.let(::inlineMessagePreview)
                 )
             )
+            byId[messageId.toString()] = list.last()
         }
         list
     }
 
-    suspend fun sendMessage(otherUserId: Int, content: String): SendResult = withContext(Dispatchers.IO) {
+    suspend fun sendMessage(otherUserId: Int, content: String, replyPreview: String? = null): SendResult = withContext(Dispatchers.IO) {
         Log.d(TAG, "sendMessage receiverId=$otherUserId len=${content.length}")
+        val imageBase64 = extractInlineImageBase64(content)
+        val wireContent = when {
+            decodeWirePayload(content) != null -> content
+            !imageBase64.isNullOrBlank() -> encodeChatWirePayload(
+                text = null,
+                replyPreview = replyPreview,
+                imageBase64 = imageBase64
+            )
+            !replyPreview.isNullOrBlank() -> encodeChatWirePayload(
+                text = content,
+                replyPreview = replyPreview,
+                imageBase64 = null
+            )
+            else -> content
+        }
         val body = JSONObject()
             .put("receiverId", otherUserId)
-            .put("content", content)
+            .put("content", wireContent)
+        if (!replyPreview.isNullOrBlank()) {
+            body.put("replyPreview", replyPreview)
+            body.put("replyToPreview", replyPreview)
+            body.put("reply_to_preview", replyPreview)
+        }
 
         val json = request("POST", "/api/messages/send", body) ?: return@withContext SendResult(
             success = false,
@@ -278,12 +320,37 @@ object NativeApi {
             message = ChatMessage(
             id = msg.optInt("messageId", 0).toString(),
             isMine = true,
-            text = msg.optString("content", ""),
+            text = run {
+                val serverContent = msg.optString("content", "")
+                val wire = decodeWirePayload(serverContent)
+                when {
+                    wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
+                        INLINE_IMAGE_PREFIX + wire.imageBase64
+                    wire?.type == "chat" && !wire.text.isNullOrBlank() ->
+                        wire.text
+                    else -> serverContent
+                }
+            },
             time = formatTime(msg.optString("sentAt", "")),
             isDelivered = false,
-            isRead = false
+            isRead = false,
+            replyPreview = run {
+                val serverContent = msg.optString("content", "")
+                val wire = decodeWirePayload(serverContent)
+                wire?.replyPreview?.let(::inlineMessagePreview)
+                    ?: extractReplyPreview(msg)?.let(::inlineMessagePreview)
+                    ?: replyPreview?.let(::inlineMessagePreview)
+            }
             )
         )
+    }
+
+    suspend fun sendReaction(otherUserId: Int, targetMessageId: String, emoji: String?): Boolean = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("receiverId", otherUserId)
+            .put("content", encodeReactionWirePayload(targetMessageId, emoji))
+        val json = request("POST", "/api/messages/send", body) ?: return@withContext false
+        json.optBoolean("success", false)
     }
 
     suspend fun deleteMessage(messageId: String): Boolean = withContext(Dispatchers.IO) {
@@ -390,10 +457,42 @@ object NativeApi {
         if (iso.isBlank()) return ""
         return try {
             val odt = OffsetDateTime.parse(iso)
-            odt.format(DateTimeFormatter.ofPattern("h:mm a", Locale.US))
+            odt.atZoneSameInstant(IST_ZONE).format(IST_TIME_FORMAT)
         } catch (_: Exception) {
             iso
         }
+    }
+
+    private fun parseEpochMillis(iso: String): Long {
+        if (iso.isBlank()) return 0L
+        return try {
+            OffsetDateTime.parse(iso).toInstant().toEpochMilli()
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun extractReplyPreview(messageJson: JSONObject): String? {
+        val direct = listOf(
+            "replyPreview",
+            "replyToPreview",
+            "reply_to_preview",
+            "replyText",
+            "reply_to_text",
+            "replyContent",
+            "reply_content"
+        ).firstNotNullOfOrNull { key ->
+            messageJson.optString(key, "").takeIf { it.isNotBlank() }
+        }
+        if (!direct.isNullOrBlank()) return direct
+
+        val nested = messageJson.optJSONObject("replyTo")
+            ?: messageJson.optJSONObject("reply_to")
+        if (nested != null) {
+            return nested.optString("content", "").takeIf { it.isNotBlank() }
+                ?: nested.optString("text", "").takeIf { it.isNotBlank() }
+        }
+        return null
     }
 
     private fun request(method: String, path: String, body: JSONObject? = null): JSONObject? {

@@ -5,7 +5,11 @@ data class ChatSummary(
     val name: String,
     var lastMessage: String,
     var lastTime: String,
-    var unreadCount: Int = 0
+    var unreadCount: Int = 0,
+    var lastIsFromMe: Boolean = false,
+    var lastIsDelivered: Boolean = false,
+    var lastIsRead: Boolean = false,
+    var lastSentAtEpochMs: Long = 0L
 )
 
 data class ChatMessage(

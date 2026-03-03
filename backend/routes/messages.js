@@ -96,6 +96,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
 router.get('/conversations/list', isAuthenticated, async (req, res) => {
     try {
         const userId = req.user.user_id;
+        const onlineUsers = req.app.get('onlineUsers');
 
         const connections = await prisma.connections.findMany({
             where: {
@@ -151,12 +152,22 @@ router.get('/conversations/list', isAuthenticated, async (req, res) => {
                     lastMessage: lastMessage ? {
                         content:  lastMessage.content,
                         sentAt:   lastMessage.sent_at,
-                        isFromMe: lastMessage.sender_id === userId
+                        isFromMe: lastMessage.sender_id === userId,
+                        isRead: lastMessage.is_read,
+                        // Delivery is not persisted yet; infer from read/receiver-online.
+                        isDelivered: lastMessage.is_read || !!(onlineUsers && onlineUsers.has(lastMessage.receiver_id))
                     } : null,
                     unreadCount
                 };
             })
         );
+
+        conversations.sort((a, b) => {
+            if (!a.lastMessage && !b.lastMessage) return 0;
+            if (!a.lastMessage) return 1;
+            if (!b.lastMessage) return -1;
+            return new Date(b.lastMessage.sentAt) - new Date(a.lastMessage.sentAt);
+        });
 
         res.json({ success: true, conversations });
     } catch (error) {
