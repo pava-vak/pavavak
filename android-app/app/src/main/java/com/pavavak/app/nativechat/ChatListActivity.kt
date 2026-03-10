@@ -78,6 +78,7 @@ class ChatListActivity : AppCompatActivity() {
                     Intent(this, ChatActivity::class.java)
                         .putExtra(ChatActivity.EXTRA_CHAT_ID, chat.chatId)
                         .putExtra(ChatActivity.EXTRA_CHAT_NAME, chat.name)
+                        .putExtra(ChatActivity.EXTRA_CHAT_PHOTO, chat.profilePhotoBase64)
                 )
             },
             onLongClick = { chat ->

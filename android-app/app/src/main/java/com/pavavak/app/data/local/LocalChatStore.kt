@@ -33,6 +33,7 @@ class LocalChatStore(private val db: AppLocalDatabase) {
     suspend fun upsertConversation(
         chatId: Int,
         displayName: String,
+        profilePhotoBase64: String?,
         lastMessagePlain: String?,
         lastMessageTimeRaw: String?,
         lastMessageTimeDisplay: String?,
@@ -43,6 +44,7 @@ class LocalChatStore(private val db: AppLocalDatabase) {
             ConversationEntity(
                 chatId = chatId,
                 displayName = displayName,
+                profilePhotoBase64 = profilePhotoBase64,
                 lastMessageCipher = lastMessagePlain?.let { LocalMessageCipher.encrypt(it) },
                 lastMessageTimeRaw = lastMessageTimeRaw,
                 lastMessageTimeDisplay = lastMessageTimeDisplay,
@@ -116,6 +118,7 @@ class LocalChatStore(private val db: AppLocalDatabase) {
             upsertConversation(
                 chatId = chatId,
                 displayName = c.name,
+                profilePhotoBase64 = c.profilePhotoBase64,
                 lastMessagePlain = c.lastMessage,
                 lastMessageTimeRaw = null,
                 lastMessageTimeDisplay = c.lastTime,
@@ -133,7 +136,8 @@ class LocalChatStore(private val db: AppLocalDatabase) {
                 lastMessage = LocalMessageCipher.decrypt(e.lastMessageCipher).orEmpty(),
                 lastTime = e.lastMessageTimeDisplay.orEmpty(),
                 unreadCount = e.unreadCount,
-                lastSentAtEpochMs = e.updatedAt
+                lastSentAtEpochMs = e.updatedAt,
+                profilePhotoBase64 = e.profilePhotoBase64
             )
         }
     }
@@ -173,6 +177,8 @@ class LocalChatStore(private val db: AppLocalDatabase) {
             )
         }
     }
+
+    suspend fun latestServerMessageId(chatId: Int): Int? = messageDao.getLatestServerMessageId(chatId)
 
     suspend fun readPendingMessages(chatId: Int): List<PendingDraft> {
         return pendingDao.getByChat(chatId)

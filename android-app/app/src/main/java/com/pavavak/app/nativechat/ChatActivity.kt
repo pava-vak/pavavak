@@ -1,4 +1,4 @@
-package com.pavavak.app.nativechat
+﻿package com.pavavak.app.nativechat
 
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
@@ -13,6 +13,7 @@ import android.view.View
 import android.view.HapticFeedbackConstants
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -29,6 +30,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.pavavak.app.AppSecurityPrefs
+import com.pavavak.app.AvatarUtils
 import com.pavavak.app.R
 import com.pavavak.app.data.local.LocalChatStore
 import com.pavavak.app.data.local.LocalDatabaseProvider
@@ -52,7 +54,12 @@ class ChatActivity : AppCompatActivity() {
 
     private var otherUserId: Int = 0
     private var currentChatName: String = "Chat"
+    private var currentChatPhotoBase64: String? = null
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var toolbarName: TextView
+    private lateinit var toolbarSubtitleInline: TextView
+    private lateinit var toolbarAvatarImage: ImageView
+    private lateinit var toolbarAvatarFallback: TextView
     private lateinit var messages: MutableList<ChatMessage>
     private lateinit var adapter: MessageAdapter
 
@@ -71,9 +78,11 @@ class ChatActivity : AppCompatActivity() {
     private var replyTarget: ChatMessage? = null
     private var refreshJob: Job? = null
     private var typingGuardJob: Job? = null
+    private var presenceRefreshJob: Job? = null
     private var realtimeConnected: Boolean = false
     private var lastServerSignature: String = ""
     private var initialResumeRefreshPending = false
+    private var latestPresence: PresenceResult? = null
     private val pendingMessages = mutableListOf<ChatMessage>()
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -95,14 +104,20 @@ class ChatActivity : AppCompatActivity() {
 
         otherUserId = (intent.getStringExtra(EXTRA_CHAT_ID) ?: "0").toIntOrNull() ?: 0
         val chatName = intent.getStringExtra(EXTRA_CHAT_NAME) ?: "Chat"
+        currentChatPhotoBase64 = intent.getStringExtra(EXTRA_CHAT_PHOTO)
         currentChatName = ContactAliasPrefs.aliasFor(this, otherUserId, chatName)
         decoyMode = AppSecurityPrefs.isDecoyModeActive(this)
 
         toolbar = findViewById(R.id.chatToolbar)
-        toolbar.title = if (decoyMode) "$currentChatName (Decoy)" else currentChatName
+        toolbarName = findViewById(R.id.chatToolbarName)
+        toolbarSubtitleInline = findViewById(R.id.chatToolbarSubtitleInline)
+        toolbarAvatarImage = findViewById(R.id.chatToolbarAvatarImage)
+        toolbarAvatarFallback = findViewById(R.id.chatToolbarAvatarFallback)
+        toolbar.title = ""
         toolbar.subtitle = "Status unavailable"
         toolbar.setNavigationOnClickListener { finish() }
         toolbar.setOnMenuItemClickListener { onToolbarMenuClick(it) }
+        renderToolbarHeader()
         findViewById<MaterialButton>(R.id.attachBtn).setOnClickListener {
             if (decoyMode) {
                 Toast.makeText(this, "Decoy mode: sending disabled", Toast.LENGTH_SHORT).show()
@@ -226,7 +241,8 @@ class ChatActivity : AppCompatActivity() {
             })
         }
         enqueuePendingIfAny()
-        updateToolbarPresence(messages)
+        startPresenceRefresh()
+        updateToolbarPresence()
         if (initialResumeRefreshPending) {
             initialResumeRefreshPending = false
         } else {
@@ -240,6 +256,8 @@ class ChatActivity : AppCompatActivity() {
         refreshJob = null
         typingGuardJob?.cancel()
         typingGuardJob = null
+        presenceRefreshJob?.cancel()
+        presenceRefreshJob = null
         NativeApi.disconnectRealtime()
         realtimeConnected = false
     }
@@ -274,36 +292,44 @@ class ChatActivity : AppCompatActivity() {
                 adapter.refresh()
                 syncListVisibility()
                 progress.visibility = View.GONE
-                updateToolbarPresence(cached)
+                updateToolbarPresence()
             }
 
-            val list = NativeApi.getMessages(otherUserId)
-            Log.d(tag, "loadMessages serverCount=${list.size} pendingCount=${pendingMessages.size}")
-            val signature = buildServerSignature(list)
-            val changed = signature != lastServerSignature
-            if (changed) {
-                applyServerMessages(list)
+            val latestServerMessageId = withContext(Dispatchers.IO) { localStore.latestServerMessageId(otherUserId) }
+            val list = NativeApi.getMessages(otherUserId, latestServerMessageId)
+            Log.d(tag, "loadMessages serverCount=${list.size} pendingCount=${pendingMessages.size} afterId=${latestServerMessageId ?: 0}")
+            if (cached.isEmpty()) {
+                val signature = buildServerSignature(list)
+                val changed = signature != lastServerSignature
+                if (changed) {
+                    applyServerMessages(list)
+                    markIncomingAsRead(list)
+                    syncListVisibility()
+                    withContext(Dispatchers.IO) {
+                        localStore.cacheMessages(otherUserId, messages)
+                    }
+                    lastServerSignature = signature
+                }
+            } else if (list.isNotEmpty()) {
+                mergeIncrementalServerMessages(list)
                 markIncomingAsRead(list)
                 syncListVisibility()
-                updateToolbarPresence(list)
                 withContext(Dispatchers.IO) {
                     localStore.cacheMessages(otherUserId, messages)
                 }
-                lastServerSignature = signature
-            } else {
-                updateToolbarPresence(messages)
+                lastServerSignature = buildServerSignature(messages.filter { isServerMessageId(it.id) })
             }
 
             progress.visibility = View.GONE
             if (messages.isNotEmpty()) {
                 recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
             }
-            updateToolbarPresence(messages)
+            updateToolbarPresence()
             } catch (e: Exception) {
                 logChatError("loadMessages", e)
                 progress.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
-                updateToolbarPresence(messages)
+                updateToolbarPresence()
             }
         }
     }
@@ -317,33 +343,29 @@ class ChatActivity : AppCompatActivity() {
             try {
             val wasAtBottom = isAtBottom()
             val prevLastId = messages.lastOrNull()?.id
-            val list = NativeApi.getMessages(otherUserId)
-            Log.d(tag, "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size}")
-            val signature = buildServerSignature(list)
-            val changed = signature != lastServerSignature
-            if (changed) {
-                applyServerMessages(list)
+            val latestServerMessageId = withContext(Dispatchers.IO) { localStore.latestServerMessageId(otherUserId) }
+            val list = NativeApi.getMessages(otherUserId, latestServerMessageId)
+            Log.d(tag, "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size} afterId=${latestServerMessageId ?: 0}")
+            if (list.isNotEmpty()) {
+                mergeIncrementalServerMessages(list)
                 markIncomingAsRead(list)
-                updateToolbarPresence(list)
                 withContext(Dispatchers.IO) {
                     localStore.cacheMessages(otherUserId, messages)
                 }
-                lastServerSignature = signature
+                lastServerSignature = buildServerSignature(messages.filter { isServerMessageId(it.id) })
                 val newLastId = messages.lastOrNull()?.id
                 val hasNewTail = newLastId != null && newLastId != prevLastId
                 if (messages.isNotEmpty() && (wasAtBottom || hasNewTail)) {
                     recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
                 }
-            } else {
-                updateToolbarPresence(messages)
             }
             swipeRefresh.isRefreshing = false
             syncListVisibility()
-            updateToolbarPresence(messages)
+            updateToolbarPresence()
             } catch (e: Exception) {
                 logChatError("refreshMessagesSilently", e)
                 swipeRefresh.isRefreshing = false
-                updateToolbarPresence(messages)
+                updateToolbarPresence()
             }
         }
     }
@@ -357,6 +379,22 @@ class ChatActivity : AppCompatActivity() {
                 refreshMessagesSilently()
             }
         }
+    }
+
+    private fun startPresenceRefresh() {
+        if (decoyMode || presenceRefreshJob != null) return
+        presenceRefreshJob = lifecycleScope.launch {
+            while (true) {
+                refreshPresence()
+                delay(if (realtimeConnected) 20_000 else 8_000)
+            }
+        }
+    }
+
+    private suspend fun refreshPresence() {
+        if (decoyMode) return
+        latestPresence = NativeApi.getPresence(otherUserId)
+        updateToolbarPresence()
     }
 
     private fun enqueuePendingIfAny() {
@@ -449,7 +487,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun pickReaction(message: ChatMessage) {
-        val emojis = arrayOf("👍", "❤️", "😂", "😮", "😢", "🙏", "❌ Remove")
+        val emojis = arrayOf("ðŸ‘", "â¤ï¸", "ðŸ˜‚", "ðŸ˜®", "ðŸ˜¢", "ðŸ™", "âŒ Remove")
         AlertDialog.Builder(this)
             .setTitle("React")
             .setItems(emojis) { _, which ->
@@ -578,7 +616,7 @@ class ChatActivity : AppCompatActivity() {
         message.time = "queued"
         adapter.refresh()
         PendingSyncScheduler.enqueueNow(this)
-        updateToolbarPresence(messages)
+        updateToolbarPresence()
         Toast.makeText(this, "Retry scheduled", Toast.LENGTH_SHORT).show()
     }
 
@@ -636,7 +674,7 @@ class ChatActivity : AppCompatActivity() {
                     localStore.markPendingQueued(pendingLocal.id, sent.error.ifBlank { "Network unavailable" })
                 }
                 PendingSyncScheduler.enqueueNow(this@ChatActivity)
-                updateToolbarPresence(messages)
+                updateToolbarPresence()
                 Toast.makeText(
                     this@ChatActivity,
                     "Network unavailable. Message queued.",
@@ -651,7 +689,7 @@ class ChatActivity : AppCompatActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 localStore.markPendingSynced(pendingLocal.id, otherUserId, sent.message)
             }
-            updateToolbarPresence(messages)
+            updateToolbarPresence()
             refreshMessagesSilently()
         }
     }
@@ -727,6 +765,35 @@ class ChatActivity : AppCompatActivity() {
         return sb.toString()
     }
 
+    private fun mergeIncrementalServerMessages(incomingMessages: List<ChatMessage>) {
+        if (incomingMessages.isEmpty()) return
+        val mergedServer = LinkedHashMap<String, ChatMessage>()
+        messages.filter { isServerMessageId(it.id) }.forEach { mergedServer[it.id] = it }
+        incomingMessages.forEach { msg ->
+            val existing = mergedServer[msg.id]
+            if (existing != null && msg.reaction.isNullOrBlank() && !existing.reaction.isNullOrBlank()) {
+                msg.reaction = existing.reaction
+            }
+            mergedServer[msg.id] = msg
+        }
+
+        val sortedServer = mergedServer.values.sortedWith(
+            compareBy<ChatMessage> { it.id.toIntOrNull() ?: Int.MAX_VALUE }
+                .thenBy { it.time }
+        )
+
+        messages.clear()
+        messages.addAll(sortedServer)
+        messages.addAll(pendingMessages)
+        messages.forEach { msg ->
+            val localReaction = MessageReactionPrefs.getReaction(this, otherUserId, msg.id)
+            if (!localReaction.isNullOrBlank()) {
+                msg.reaction = localReaction
+            }
+        }
+        adapter.refresh()
+    }
+
     private fun applyServerMessages(serverMessages: List<ChatMessage>) {
         val remainingLocal = mutableListOf<ChatMessage>()
         val unmatchedServerMine = serverMessages.toMutableList()
@@ -786,7 +853,7 @@ class ChatActivity : AppCompatActivity() {
                 NativeApi.markMessageRead(message.id)
             }
         }
-        updateToolbarPresence(messages)
+        updateToolbarPresence()
         lifecycleScope.launch(Dispatchers.IO) { localStore.cacheMessages(otherUserId, messages) }
     }
 
@@ -797,7 +864,7 @@ class ChatActivity : AppCompatActivity() {
         if (!msg.isMine) return
         msg.isDelivered = true
         adapter.refresh()
-        updateToolbarPresence(messages)
+        updateToolbarPresence()
     }
 
     private fun applyRealtimeRead(messageId: String) {
@@ -808,7 +875,7 @@ class ChatActivity : AppCompatActivity() {
         msg.isDelivered = true
         msg.isRead = true
         adapter.refresh()
-        updateToolbarPresence(messages)
+        updateToolbarPresence()
     }
 
     private fun applyRealtimeEdited(messageId: String, content: String, isEdited: Boolean, remoteMediaId: String?) {
@@ -917,13 +984,13 @@ class ChatActivity : AppCompatActivity() {
                 if (name.isNotBlank()) {
                     ContactAliasPrefs.setAlias(this, otherUserId, name)
                     currentChatName = name
-                    findViewById<MaterialToolbar>(R.id.chatToolbar).title = currentChatName
+                    renderToolbarHeader()
                 }
             }
             .setNeutralButton("Reset") { _, _ ->
                 ContactAliasPrefs.clearAlias(this, otherUserId)
                 currentChatName = intent.getStringExtra(EXTRA_CHAT_NAME) ?: "Chat"
-                findViewById<MaterialToolbar>(R.id.chatToolbar).title = currentChatName
+                renderToolbarHeader()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -940,13 +1007,13 @@ class ChatActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun updateToolbarPresence(sourceMessages: List<ChatMessage>) {
+    private fun updateToolbarPresence() {
         lifecycleScope.launch {
             try {
                 val queuedCount = withContext(Dispatchers.IO) {
                     localStore.readPendingMessages(otherUserId).size
                 }
-                val presence = if (decoyMode) null else NativeApi.getPresence(otherUserId)
+                val presence = latestPresence
                 val base = when {
                     decoyMode -> "Decoy mode"
                     presence == null || !presence.success -> "Status unavailable"
@@ -957,6 +1024,7 @@ class ChatActivity : AppCompatActivity() {
                 }
                 val withQueue = if (queuedCount > 0) "$base | Queued: $queuedCount" else base
                 toolbar.subtitle = withQueue
+                toolbarSubtitleInline.text = base
                 updateSyncStatusChip(
                     queuedCount = queuedCount,
                     syncing = false,
@@ -966,6 +1034,7 @@ class ChatActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 logChatError("updateToolbarPresence", e)
                 toolbar.subtitle = "Status unavailable"
+                toolbarSubtitleInline.text = "Status unavailable"
                 updateSyncStatusChip(queuedCount = 0, syncing = false, online = false)
             }
         }
@@ -1019,7 +1088,7 @@ class ChatActivity : AppCompatActivity() {
             delay(8_000)
             val current = toolbar.subtitle?.toString().orEmpty()
             if (current.contains("typing", ignoreCase = true)) {
-                updateToolbarPresence(messages)
+                updateToolbarPresence()
             }
         }
     }
@@ -1028,10 +1097,28 @@ class ChatActivity : AppCompatActivity() {
         return NativeApi.formatTime(iso).ifBlank { "recently" }
     }
 
+    private fun renderToolbarHeader() {
+        val title = if (decoyMode) "$currentChatName (Decoy)" else currentChatName
+        toolbarName.text = title
+        toolbarAvatarFallback.text = currentChatName.take(1).uppercase()
+        val avatar = AvatarUtils.decodeBase64Avatar(currentChatPhotoBase64)
+        if (avatar != null) {
+            toolbarAvatarImage.setImageBitmap(avatar)
+            toolbarAvatarImage.visibility = View.VISIBLE
+            toolbarAvatarFallback.visibility = View.GONE
+        } else {
+            toolbarAvatarImage.setImageDrawable(null)
+            toolbarAvatarImage.visibility = View.GONE
+            toolbarAvatarFallback.visibility = View.VISIBLE
+        }
+    }
+
     companion object {
         const val EXTRA_CHAT_ID = "chat_id"
         const val EXTRA_CHAT_NAME = "chat_name"
+        const val EXTRA_CHAT_PHOTO = "chat_photo"
     }
 }
+
 
 

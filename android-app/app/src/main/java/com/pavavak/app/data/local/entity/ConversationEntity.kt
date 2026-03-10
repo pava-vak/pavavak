@@ -17,6 +17,9 @@ data class ConversationEntity(
     @ColumnInfo(name = "display_name")
     val displayName: String,
 
+    @ColumnInfo(name = "profile_photo_base64")
+    val profilePhotoBase64: String?,
+
     // Encrypted preview text (AES-GCM payload)
     @ColumnInfo(name = "last_message_cipher")
     val lastMessageCipher: String?,
@@ -33,4 +36,3 @@ data class ConversationEntity(
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long
 )
-

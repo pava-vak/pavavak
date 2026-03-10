@@ -27,6 +27,7 @@ coverage/
 
 # Android local/build files
 android-app/.gradle/
+android-app/.gradle-user-home/
 android-app/.idea/
 android-app/build/
 android-app/app/build/
@@ -51,6 +52,10 @@ server-code/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+FETCH_HEAD
+cd
+git
+.gitkeys/
 backend/.env 
 supabase details.txt 
 *.pub 

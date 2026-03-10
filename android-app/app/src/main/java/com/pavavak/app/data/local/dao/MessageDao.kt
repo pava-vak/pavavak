@@ -16,6 +16,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE chat_id = :chatId ORDER BY sent_at_epoch_ms ASC, updated_at ASC")
     suspend fun getByChat(chatId: Int): List<MessageEntity>
 
+    @Query("SELECT MAX(CAST(message_id AS INTEGER)) FROM messages WHERE chat_id = :chatId AND message_id GLOB '[0-9]*'")
+    suspend fun getLatestServerMessageId(chatId: Int): Int?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: MessageEntity)
 

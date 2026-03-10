@@ -19,7 +19,7 @@ import com.pavavak.app.data.local.entity.SyncStateEntity
         PendingMessageEntity::class,
         SyncStateEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(LocalDbConverters::class)
@@ -29,4 +29,3 @@ abstract class AppLocalDatabase : RoomDatabase() {
     abstract fun pendingMessageDao(): PendingMessageDao
     abstract fun syncStateDao(): SyncStateDao
 }
-

@@ -1,6 +1,7 @@
-const express = require('express');
+﻿const express = require('express');
 const router  = express.Router();
-const prisma = require('../lib/prisma'); // shared singleton — prevents connection pool exhaustion
+const { Prisma } = require('@prisma/client');
+const prisma = require('../lib/prisma'); // shared singleton â€” prevents connection pool exhaustion
 const { isAuthenticated, isAdmin } = require('../middleware/auth');
 const { sendToUser } = require('../lib/firebaseAdmin');
 const WIRE_PREFIX = '__pvk_v1__:';
@@ -33,7 +34,7 @@ function parseInlineImage(content) {
     }
 }
 
-// ─── HELPER: verify connection between two users ──────────────
+// â”€â”€â”€ HELPER: verify connection between two users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getConnection(userId1, userId2) {
     return prisma.connections.findFirst({
         where: {
@@ -110,9 +111,9 @@ router.get('/media/:mediaId', isAuthenticated, async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to fetch media' });
     }
 });
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SEND MESSAGE
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.post('/send', isAuthenticated, async (req, res) => {
     try {
         const { receiverId, content } = req.body;
@@ -238,11 +239,10 @@ router.post('/send', isAuthenticated, async (req, res) => {
 });
 // GET CONVERSATIONS LIST
 // NOTE: must be defined BEFORE /:userId route in Express
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.get('/conversations/list', isAuthenticated, async (req, res) => {
     try {
         const userId = req.user.user_id;
-        const onlineUsers = req.app.get('onlineUsers');
 
         const connections = await prisma.connections.findMany({
             where: {
@@ -257,60 +257,94 @@ router.get('/conversations/list', isAuthenticated, async (req, res) => {
             }
         });
 
-        const conversations = await Promise.all(
-            connections.map(async (conn) => {
-                const otherUser = conn.user1_id === userId ? conn.user2 : conn.user1;
+        const otherUsers = connections.map((conn) => (conn.user1_id === userId ? conn.user2 : conn.user1));
+        const otherUserIds = otherUsers.map((u) => u.user_id);
+        let lastMessageRows = [];
+        let unreadRows = [];
 
-                // Last message visible to this user (not deleted on their side)
-                const lastMessage = await prisma.messages.findFirst({
-                    where: {
-                        OR: [
-                            {
-                                sender_id:          userId,
-                                receiver_id:        otherUser.user_id,
-                                deleted_for_sender: false
-                            },
-                            {
-                                sender_id:            otherUser.user_id,
-                                receiver_id:          userId,
-                                deleted_for_receiver: false
-                            }
-                        ]
-                    },
-                    orderBy: { sent_at: 'desc' }
-                });
+        if (otherUserIds.length > 0) {
+            lastMessageRows = await prisma.$queryRaw(
+                Prisma.sql`
+                    WITH visible_messages AS (
+                        SELECT
+                            m.message_id,
+                            m.sender_id,
+                            m.receiver_id,
+                            m.content,
+                            m.sent_at,
+                            m.is_read,
+                            m.delivered_at,
+                            m.edited_at,
+                            CASE
+                                WHEN m.sender_id = ${userId} THEN m.receiver_id
+                                ELSE m.sender_id
+                            END AS other_user_id
+                        FROM messages m
+                        WHERE
+                            (
+                                m.sender_id = ${userId}
+                                AND m.receiver_id IN (${Prisma.join(otherUserIds)})
+                                AND m.deleted_for_sender = FALSE
+                            )
+                            OR
+                            (
+                                m.receiver_id = ${userId}
+                                AND m.sender_id IN (${Prisma.join(otherUserIds)})
+                                AND m.deleted_for_receiver = FALSE
+                            )
+                    )
+                    SELECT DISTINCT ON (other_user_id)
+                        other_user_id,
+                        message_id,
+                        sender_id,
+                        receiver_id,
+                        content,
+                        sent_at,
+                        is_read,
+                        delivered_at,
+                        edited_at
+                    FROM visible_messages
+                    ORDER BY other_user_id, sent_at DESC, message_id DESC
+                `
+            );
 
-                const unreadCount = await prisma.messages.count({
-                    where: {
-                        sender_id:            otherUser.user_id,
-                        receiver_id:          userId,
-                        is_read:              false,
-                        deleted_for_receiver: false
-                    }
-                });
+            unreadRows = await prisma.messages.groupBy({
+                by: ['sender_id'],
+                where: {
+                    sender_id: { in: otherUserIds },
+                    receiver_id: userId,
+                    is_read: false,
+                    deleted_for_receiver: false
+                },
+                _count: { _all: true }
+            });
+        }
 
-                return {
-                    user: {
-                        userId:   otherUser.user_id,
-                        username: otherUser.username,
-                        fullName: otherUser.full_name,
-                        profilePhotoBase64: otherUser.profile_photo_base64
-                    },
-                    lastMessage: lastMessage ? {
-                        content:  lastMessage.content,
-                        sentAt:   lastMessage.sent_at,
-                        isFromMe: lastMessage.sender_id === userId,
-                        isRead: lastMessage.is_read,
-                        // Delivery is not persisted yet; infer from read/receiver-online.
-                        isDelivered: !!lastMessage.delivered_at || lastMessage.is_read,
-                        deliveredAt: lastMessage.delivered_at,
-                        editedAt: lastMessage.edited_at,
-                        isEdited: !!lastMessage.edited_at
-                    } : null,
-                    unreadCount
-                };
-            })
-        );
+        const lastByOtherId = new Map(lastMessageRows.map((row) => [Number(row.other_user_id), row]));
+        const unreadByOtherId = new Map(unreadRows.map((row) => [Number(row.sender_id), row._count._all]));
+
+        const conversations = otherUsers.map((otherUser) => {
+            const lastMessage = lastByOtherId.get(otherUser.user_id) || null;
+            return {
+                user: {
+                    userId: otherUser.user_id,
+                    username: otherUser.username,
+                    fullName: otherUser.full_name,
+                    profilePhotoBase64: otherUser.profile_photo_base64
+                },
+                lastMessage: lastMessage ? {
+                    content: lastMessage.content,
+                    sentAt: lastMessage.sent_at,
+                    isFromMe: Number(lastMessage.sender_id) === userId,
+                    isRead: !!lastMessage.is_read,
+                    isDelivered: !!lastMessage.delivered_at || !!lastMessage.is_read,
+                    deliveredAt: lastMessage.delivered_at,
+                    editedAt: lastMessage.edited_at,
+                    isEdited: !!lastMessage.edited_at
+                } : null,
+                unreadCount: unreadByOtherId.get(otherUser.user_id) || 0
+            };
+        });
 
         conversations.sort((a, b) => {
             if (!a.lastMessage && !b.lastMessage) return 0;
@@ -325,14 +359,15 @@ router.get('/conversations/list', isAuthenticated, async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to fetch conversations' });
     }
 });
-
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // GET CONVERSATION WITH USER
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.get('/:userId', isAuthenticated, async (req, res) => {
     try {
         const currentUserId = req.user.user_id;
         const otherUserId   = parseInt(req.params.userId);
+        const afterMessageId = Number.parseInt(req.query.afterMessageId, 10);
+        const hasAfterMessageId = Number.isInteger(afterMessageId) && afterMessageId > 0;
 
         const connection = await getConnection(currentUserId, otherUserId);
         if (!connection) {
@@ -352,7 +387,8 @@ router.get('/:userId', isAuthenticated, async (req, res) => {
                         receiver_id:          currentUserId,
                         deleted_for_receiver: false
                     }
-                ]
+                ],
+                ...(hasAfterMessageId ? { message_id: { gt: afterMessageId } } : {})
             },
             orderBy: { sent_at: 'asc' }
         };
@@ -403,16 +439,21 @@ router.get('/:userId', isAuthenticated, async (req, res) => {
             isEdited: !!msg.edited_at
         }));
 
-        res.json({ success: true, messages: formattedMessages });
+        res.json({
+            success: true,
+            messages: formattedMessages,
+            incremental: hasAfterMessageId,
+            afterMessageId: hasAfterMessageId ? afterMessageId : null
+        });
     } catch (error) {
         console.error('Get conversation error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch conversation' });
     }
 });
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MARK MESSAGE AS READ
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.put('/:messageId/read', isAuthenticated, async (req, res) => {
     try {
         const messageId = parseInt(req.params.messageId);
@@ -572,12 +613,12 @@ router.put('/:messageId/edit', isAuthenticated, async (req, res) => {
     }
 });
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ADMIN: GET ALL MESSAGES IN A CONVERSATION (read-only view)
 // Returns messages between any two users for admin inspection.
-// Content visible to admin — message encryption (future) will
+// Content visible to admin â€” message encryption (future) will
 // make this impossible. For now admin sees plaintext.
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.get('/admin/conversation/:userId1/:userId2', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const userId1 = parseInt(req.params.userId1);
@@ -615,10 +656,10 @@ router.get('/admin/conversation/:userId1/:userId2', isAuthenticated, isAdmin, as
 
 
 
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ADMIN: LIST ALL CONNECTIONS (for admin messages tab)
 // Returns all user pairs that have an active connection.
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.get('/admin/connections/all', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const connections = await prisma.connections.findMany({
@@ -645,9 +686,9 @@ router.get('/admin/connections/all', isAuthenticated, isAdmin, async (req, res) 
     }
 });
 
-// ════════════════════════════════════════════════════════════
-// ADMIN: DELETE SINGLE MESSAGE (hard delete — gone for everyone)
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ADMIN: DELETE SINGLE MESSAGE (hard delete â€” gone for everyone)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.delete('/admin/:messageId', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const messageId = parseInt(req.params.messageId);
@@ -736,9 +777,9 @@ router.delete('/admin/:messageId', isAuthenticated, isAdmin, async (req, res) =>
     }
 });
 
-// ════════════════════════════════════════════════════════════
-// ADMIN: DELETE ENTIRE CONVERSATION (hard delete — gone for both)
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ADMIN: DELETE ENTIRE CONVERSATION (hard delete â€” gone for both)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 router.delete('/admin/conversation/:userId1/:userId2', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const userId1 = parseInt(req.params.userId1);
@@ -769,12 +810,12 @@ router.delete('/admin/conversation/:userId1/:userId2', isAuthenticated, isAdmin,
 
 
 
-// ════════════════════════════════════════════════════════════
-// USER: DELETE SINGLE MESSAGE (soft delete — my side only)
-// ════════════════════════════════════════════════════════════
-// - Sender deletes → sets deleted_for_sender = true
-// - Receiver deletes → sets deleted_for_receiver = true
-// - Other side is completely unaffected — still sees the message
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// USER: DELETE SINGLE MESSAGE (soft delete â€” my side only)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// - Sender deletes â†’ sets deleted_for_sender = true
+// - Receiver deletes â†’ sets deleted_for_receiver = true
+// - Other side is completely unaffected â€” still sees the message
 // - Socket event sent only to the deleting user's session
 router.delete('/:messageId', isAuthenticated, async (req, res) => {
     try {
@@ -892,9 +933,9 @@ router.delete('/:messageId', isAuthenticated, async (req, res) => {
     }
 });
 
-// ════════════════════════════════════════════════════════════
-// USER: CLEAR ENTIRE CHAT (soft delete — my side only)
-// ════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// USER: CLEAR ENTIRE CHAT (soft delete â€” my side only)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Hides all messages in conversation from requester's view.
 // Other user still sees every message unaffected.
 router.delete('/conversation/:otherUserId/clear', isAuthenticated, async (req, res) => {
@@ -914,13 +955,13 @@ router.delete('/conversation/:otherUserId/clear', isAuthenticated, async (req, r
             });
         }
 
-        // Messages I sent → mark deleted_for_sender
+        // Messages I sent â†’ mark deleted_for_sender
         await prisma.messages.updateMany({
             where: { sender_id: userId, receiver_id: otherUserId },
             data:  { deleted_for_sender: true }
         });
 
-        // Messages I received → mark deleted_for_receiver
+        // Messages I received â†’ mark deleted_for_receiver
         await prisma.messages.updateMany({
             where: { sender_id: otherUserId, receiver_id: userId },
             data:  { deleted_for_receiver: true }
@@ -946,6 +987,7 @@ router.delete('/conversation/:otherUserId/clear', isAuthenticated, async (req, r
 });
 
 module.exports = router;
+
 
 
 

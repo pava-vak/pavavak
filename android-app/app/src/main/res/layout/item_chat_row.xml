@@ -24,9 +24,10 @@
                 android:id="@+id/chatAvatarImage"
                 android:layout_width="42dp"
                 android:layout_height="42dp"
+                android:background="@drawable/bg_avatar_circle"
+                android:clipToOutline="true"
                 android:scaleType="centerCrop"
-                android:visibility="gone"
-                app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.PaVaVak.Circle" />
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/chatAvatar"

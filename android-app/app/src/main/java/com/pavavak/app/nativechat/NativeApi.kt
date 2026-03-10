@@ -347,14 +347,22 @@ object NativeApi {
         if (hasUnreadPhoto) "File sent" else null
     }
 
-    suspend fun getMessages(otherUserId: Int): List<ChatMessage> = withContext(Dispatchers.IO) {
+    suspend fun getMessages(otherUserId: Int, afterMessageId: Int? = null): List<ChatMessage> = withContext(Dispatchers.IO) {
         val session = cachedSession ?: getSession()
         if (!session.authenticated) {
             Log.w(TAG, "getMessages aborted: session not authenticated")
             return@withContext emptyList()
         }
 
-        val json = request("GET", "/api/messages/$otherUserId")
+        val path = buildString {
+            append("/api/messages/")
+            append(otherUserId)
+            if (afterMessageId != null && afterMessageId > 0) {
+                append("?afterMessageId=")
+                append(afterMessageId)
+            }
+        }
+        val json = request("GET", path)
         if (json == null) {
             Log.w(TAG, "getMessages null response for otherUserId=$otherUserId")
             return@withContext emptyList()
@@ -681,7 +689,7 @@ object NativeApi {
     suspend fun connectRealtime(chatUserId: Int, listener: RealtimeListener): Boolean = withContext(Dispatchers.IO) {
         try {
             disconnectRealtime()
-            val session = getSession()
+            val session = cachedSession ?: getSession()
             if (!session.authenticated || session.userId <= 0) return@withContext false
             val cookie = CookieManager.getInstance().getCookie(baseUrl).orEmpty()
             if (cookie.isBlank()) return@withContext false
