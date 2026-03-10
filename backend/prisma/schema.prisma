@@ -15,10 +15,12 @@ model users {
   email              String    @unique
   password_hash      String
   full_name          String?
+  profile_photo_base64 String?
   is_admin           Boolean   @default(false)
   is_approved        Boolean   @default(false)
   two_factor_enabled Boolean   @default(false)
   two_factor_secret  String?
+  hide_last_seen     Boolean   @default(false)
   created_at         DateTime  @default(now())
   last_login         DateTime?
   reset_token        String?

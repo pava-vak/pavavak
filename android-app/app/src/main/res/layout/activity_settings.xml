@@ -79,6 +79,58 @@
         android:layout_marginHorizontal="16dp"
         android:text="Edit My Name (Both Ends)" />
 
+    <FrameLayout
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginStart="16dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/profilePhotoPreview"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.PaVaVak.Circle" />
+
+        <TextView
+            android:id="@+id/profilePhotoInitial"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:background="@drawable/bg_avatar_circle"
+            android:gravity="center"
+            android:text="U"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/changeProfilePhotoBtn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Add / Change Profile Photo" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/removeProfilePhotoBtn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Remove Profile Photo" />
+
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/hideLastSeenSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Hide my last seen from other users" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

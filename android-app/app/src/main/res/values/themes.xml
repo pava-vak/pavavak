@@ -6,4 +6,9 @@
         <item name="android:statusBarColor">@color/top_bar_bg</item>
         <item name="android:navigationBarColor">@color/screen_bg</item>
     </style>
+
+    <style name="ShapeAppearanceOverlay.PaVaVak.Circle">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
 </resources>

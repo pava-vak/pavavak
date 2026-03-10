@@ -21,6 +21,7 @@ const pgSession = require('connect-pg-simple')(session);
 const prisma     = require('./lib/prisma'); // shared singleton - one pool for entire app
 const { ensurePresenceTypingSchema } = require('./lib/presenceTypingBootstrap');
 const { ensurePasswordResetSchema } = require('./lib/passwordResetBootstrap');
+const { ensureProfilePrivacySchema } = require('./lib/profilePrivacyBootstrap');
 
 // =====================
 // INIT
@@ -529,6 +530,12 @@ async function startServer() {
   } catch (e) {
     console.error('[BOOT] Password reset schema bootstrap failed:', e.message);
     // Keep existing app startup unaffected even if bootstrap fails.
+  }
+  try {
+    await ensureProfilePrivacySchema();
+    console.log('[BOOT] Profile/privacy schema ensured');
+  } catch (e) {
+    console.error('[BOOT] Profile/privacy schema bootstrap failed:', e.message);
   }
 
   server.listen(PORT, '0.0.0.0', () => {

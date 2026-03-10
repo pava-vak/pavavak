@@ -933,8 +933,8 @@ class ChatActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Presence info")
             .setMessage(
-                "Online/last seen is estimated from message delivery/read signals. " +
-                    "Real typing or exact live presence needs backend presence APIs."
+                "Presence now comes from the server heartbeat. " +
+                    "If the user hides last seen, you will only see online when they are active."
             )
             .setPositiveButton("OK", null)
             .show()
@@ -946,22 +946,21 @@ class ChatActivity : AppCompatActivity() {
                 val queuedCount = withContext(Dispatchers.IO) {
                     localStore.readPendingMessages(otherUserId).size
                 }
-                val liveMessages = if (sourceMessages.isEmpty()) messages else sourceMessages
-                val onlineByDeliverySignal = liveMessages.any { it.isMine && !it.isRead && it.isDelivered }
-                val lastVisibleTime = liveMessages.lastOrNull()?.time?.trim().orEmpty()
+                val presence = if (decoyMode) null else NativeApi.getPresence(otherUserId)
                 val base = when {
                     decoyMode -> "Decoy mode"
-                    onlineByDeliverySignal -> "Online"
-                    lastVisibleTime.isNotBlank() && !lastVisibleTime.contains("typing", ignoreCase = true) ->
-                        "Last seen around $lastVisibleTime"
-                    else -> "Status unavailable"
+                    presence == null || !presence.success -> "Status unavailable"
+                    presence.isOnline -> "Online"
+                    presence.isLastSeenHidden -> "Last seen hidden"
+                    !presence.lastSeenAt.isNullOrBlank() -> "Last seen ${formatPresenceTime(presence.lastSeenAt)}"
+                    else -> "Offline"
                 }
                 val withQueue = if (queuedCount > 0) "$base | Queued: $queuedCount" else base
                 toolbar.subtitle = withQueue
                 updateSyncStatusChip(
                     queuedCount = queuedCount,
-                    syncing = swipeRefresh.isRefreshing || progress.visibility == View.VISIBLE,
-                    online = onlineByDeliverySignal
+                    syncing = false,
+                    online = presence?.isOnline == true
                 )
                 enforceTypingSubtitleTimeout()
             } catch (e: Exception) {
@@ -1023,6 +1022,10 @@ class ChatActivity : AppCompatActivity() {
                 updateToolbarPresence(messages)
             }
         }
+    }
+
+    private fun formatPresenceTime(iso: String): String {
+        return NativeApi.formatTime(iso).ifBlank { "recently" }
     }
 
     companion object {

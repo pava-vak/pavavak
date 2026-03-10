@@ -112,6 +112,7 @@ class LocalChatStore(private val db: AppLocalDatabase) {
         val now = System.currentTimeMillis()
         chats.forEachIndexed { idx, c ->
             val chatId = c.chatId.toIntOrNull() ?: return@forEachIndexed
+            val sortEpoch = if (c.lastSentAtEpochMs > 0L) c.lastSentAtEpochMs else now - idx
             upsertConversation(
                 chatId = chatId,
                 displayName = c.name,
@@ -119,7 +120,7 @@ class LocalChatStore(private val db: AppLocalDatabase) {
                 lastMessageTimeRaw = null,
                 lastMessageTimeDisplay = c.lastTime,
                 unreadCount = c.unreadCount,
-                nowMs = now + idx
+                nowMs = sortEpoch
             )
         }
     }
@@ -131,7 +132,8 @@ class LocalChatStore(private val db: AppLocalDatabase) {
                 name = e.displayName,
                 lastMessage = LocalMessageCipher.decrypt(e.lastMessageCipher).orEmpty(),
                 lastTime = e.lastMessageTimeDisplay.orEmpty(),
-                unreadCount = e.unreadCount
+                unreadCount = e.unreadCount,
+                lastSentAtEpochMs = e.updatedAt
             )
         }
     }

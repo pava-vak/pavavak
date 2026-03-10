@@ -3,10 +3,12 @@
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.pavavak.app.R
+import com.pavavak.app.AvatarUtils
 
 class ChatListAdapter(
     private var items: List<ChatSummary>,
@@ -16,6 +18,7 @@ class ChatListAdapter(
 
     class ChatListVH(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: TextView = view.findViewById(R.id.chatAvatar)
+        val avatarImage: ImageView = view.findViewById(R.id.chatAvatarImage)
         val name: TextView = view.findViewById(R.id.chatName)
         val message: TextView = view.findViewById(R.id.chatLastMessage)
         val ticks: TextView = view.findViewById(R.id.chatLastTicks)
@@ -31,6 +34,16 @@ class ChatListAdapter(
     override fun onBindViewHolder(holder: ChatListVH, position: Int) {
         val item = items[position]
         holder.avatar.text = item.name.take(1).uppercase()
+        val avatarBitmap = AvatarUtils.decodeBase64Avatar(item.profilePhotoBase64)
+        if (avatarBitmap != null) {
+            holder.avatarImage.setImageBitmap(avatarBitmap)
+            holder.avatarImage.visibility = View.VISIBLE
+            holder.avatar.visibility = View.GONE
+        } else {
+            holder.avatarImage.setImageDrawable(null)
+            holder.avatarImage.visibility = View.GONE
+            holder.avatar.visibility = View.VISIBLE
+        }
         holder.name.text = item.name
         holder.message.text = item.lastMessage
         holder.time.text = item.lastTime

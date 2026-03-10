@@ -3,6 +3,20 @@ const router = express.Router();
 const prisma = require('../lib/prisma');
 const { isAuthenticated } = require('../middleware/auth');
 const bcrypt = require('bcrypt');
+const MAX_PROFILE_PHOTO_BYTES = Number(process.env.MAX_PROFILE_PHOTO_BYTES || 350 * 1024);
+
+function normalizeProfilePhotoBase64(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw new Error('Profile photo must be a base64 string');
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const bytes = Buffer.from(trimmed, 'base64');
+  if (!bytes.length) throw new Error('Profile photo is invalid');
+  if (bytes.length > MAX_PROFILE_PHOTO_BYTES) {
+    throw new Error('Profile photo is too large');
+  }
+  return trimmed;
+}
 
 // Get current user profile
 router.get('/profile', isAuthenticated, async (req, res) => {
@@ -16,9 +30,11 @@ router.get('/profile', isAuthenticated, async (req, res) => {
         username: true,
         email: true,
         full_name: true,
+        profile_photo_base64: true,
         is_admin: true,
         is_approved: true,
         two_factor_enabled: true,
+        hide_last_seen: true,
         created_at: true,
         last_login: true
       }
@@ -35,9 +51,11 @@ router.get('/profile', isAuthenticated, async (req, res) => {
         username: user.username,
         email: user.email,
         fullName: user.full_name,
+        profilePhotoBase64: user.profile_photo_base64,
         isAdmin: user.is_admin,
         isApproved: user.is_approved,
         twoFactorEnabled: user.two_factor_enabled,
+        hideLastSeen: user.hide_last_seen,
         createdAt: user.created_at,
         lastLogin: user.last_login
       }
@@ -48,22 +66,41 @@ router.get('/profile', isAuthenticated, async (req, res) => {
   }
 });
 
-// Update user profile (full name only)
+// Update user profile
 router.put('/profile', isAuthenticated, async (req, res) => {
   try {
     const userId = req.user.user_id;
-    const { fullName } = req.body;
+    const { fullName, hideLastSeen, profilePhotoBase64, clearProfilePhoto } = req.body || {};
+    const data = {};
+
+    if (typeof fullName === 'string') {
+      data.full_name = fullName.trim();
+    }
+    if (typeof hideLastSeen === 'boolean') {
+      data.hide_last_seen = hideLastSeen;
+    }
+    if (clearProfilePhoto === true) {
+      data.profile_photo_base64 = null;
+    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, 'profilePhotoBase64')) {
+      data.profile_photo_base64 = normalizeProfilePhotoBase64(profilePhotoBase64);
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ success: false, error: 'No profile changes provided' });
+    }
 
     await prisma.users.update({
       where: { user_id: userId },
-      data: { full_name: fullName }
+      data
     });
 
     console.log(`User ${userId} updated profile`);
     res.json({ success: true, message: 'Profile updated' });
   } catch (error) {
     console.error('Error updating user profile:', error);
-    res.status(500).json({ success: false, error: 'Failed to update profile' });
+    const message = error.message || 'Failed to update profile';
+    const status = /profile photo|No profile changes/i.test(message) ? 400 : 500;
+    res.status(status).json({ success: false, error: message });
   }
 });
 

@@ -61,9 +61,10 @@ router.get('/me', isAuthenticated, async (req, res) => {
   try {
     const userId = req.user.user_id;
     const rows = await prisma.$queryRaw`
-      SELECT user_id, is_online, last_seen_at, last_heartbeat_at, updated_at
-      FROM user_presence
-      WHERE user_id = ${userId}
+      SELECT up.user_id, up.is_online, up.last_seen_at, up.last_heartbeat_at, up.updated_at, u.hide_last_seen
+      FROM user_presence up
+      JOIN users u ON u.user_id = up.user_id
+      WHERE up.user_id = ${userId}
       LIMIT 1
     `;
     const row = rows[0] || null;
@@ -74,7 +75,8 @@ router.get('/me', isAuthenticated, async (req, res) => {
           userId,
           isOnline: false,
           lastSeenAt: null,
-          lastHeartbeatAt: null
+          lastHeartbeatAt: null,
+          isLastSeenHidden: !!req.user.hide_last_seen
         }
       });
     }
@@ -89,7 +91,8 @@ router.get('/me', isAuthenticated, async (req, res) => {
         userId: row.user_id,
         isOnline,
         lastSeenAt: row.last_seen_at,
-        lastHeartbeatAt: row.last_heartbeat_at
+        lastHeartbeatAt: row.last_heartbeat_at,
+        isLastSeenHidden: !!row.hide_last_seen
       }
     });
   } catch (error) {
@@ -112,12 +115,14 @@ router.get('/:userId', isAuthenticated, async (req, res) => {
     }
 
     const rows = await prisma.$queryRaw`
-      SELECT user_id, is_online, last_seen_at, last_heartbeat_at, updated_at
-      FROM user_presence
-      WHERE user_id = ${targetId}
+      SELECT up.user_id, up.is_online, up.last_seen_at, up.last_heartbeat_at, up.updated_at, u.hide_last_seen
+      FROM user_presence up
+      JOIN users u ON u.user_id = up.user_id
+      WHERE up.user_id = ${targetId}
       LIMIT 1
     `;
     const row = rows[0] || null;
+    const lastSeenHidden = !!row?.hide_last_seen && !req.user.is_admin && viewerId !== targetId;
     if (!row) {
       return res.json({
         success: true,
@@ -125,7 +130,8 @@ router.get('/:userId', isAuthenticated, async (req, res) => {
           userId: targetId,
           isOnline: false,
           lastSeenAt: null,
-          lastHeartbeatAt: null
+          lastHeartbeatAt: null,
+          isLastSeenHidden: false
         }
       });
     }
@@ -147,8 +153,9 @@ router.get('/:userId', isAuthenticated, async (req, res) => {
       presence: {
         userId: row.user_id,
         isOnline,
-        lastSeenAt: row.last_seen_at,
-        lastHeartbeatAt: row.last_heartbeat_at
+        lastSeenAt: lastSeenHidden ? null : row.last_seen_at,
+        lastHeartbeatAt: row.last_heartbeat_at,
+        isLastSeenHidden: lastSeenHidden
       }
     });
   } catch (error) {

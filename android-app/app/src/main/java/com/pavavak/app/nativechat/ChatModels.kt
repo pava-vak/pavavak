@@ -9,7 +9,8 @@ data class ChatSummary(
     var lastIsFromMe: Boolean = false,
     var lastIsDelivered: Boolean = false,
     var lastIsRead: Boolean = false,
-    var lastSentAtEpochMs: Long = 0L
+    var lastSentAtEpochMs: Long = 0L,
+    var profilePhotoBase64: String? = null
 )
 
 data class ChatMessage(

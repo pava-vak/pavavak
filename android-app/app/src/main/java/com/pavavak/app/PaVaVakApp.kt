@@ -10,10 +10,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.pavavak.app.data.local.LocalDatabaseProvider
+import com.pavavak.app.nativechat.NativeApi
 import com.pavavak.app.notifications.NotificationHelper
 import com.pavavak.app.sync.PendingSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
@@ -37,7 +39,10 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
             LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_START -> {
-                        // Foreground: push channel already active via FCM.
+                        appScope.launch {
+                            runCatching { NativeApi.sendPresenceHeartbeat() }
+                            runCatching { NativeApi.registerFcmTokenFromPrefs(this@PaVaVakApp) }
+                        }
                     }
                     Lifecycle.Event.ON_STOP -> {
                         // Reliable app-level background marker (covers minimize/app switch).
@@ -45,7 +50,9 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
                         AppSecurityPrefs.setLockRequiredOnResume(this, true)
                         appWasInBackground = true
                         Log.i(tag, "Process ON_STOP -> lock_required_on_resume=true")
-                        // Background: avoid tight polling loops to reduce battery usage.
+                        appScope.launch {
+                            runCatching { NativeApi.markPresenceOffline() }
+                        }
                     }
                     else -> Unit
                 }

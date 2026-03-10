@@ -5,8 +5,11 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -14,9 +17,39 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.pavavak.app.nativechat.NativeApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsActivity : AppCompatActivity() {
+    private lateinit var hideLastSeenSwitch: SwitchMaterial
+    private lateinit var profilePhotoPreview: ImageView
+    private lateinit var profilePhotoInitial: TextView
+    private var currentProfileName: String = "User"
+    private var currentProfilePhotoBase64: String? = null
+    private var suppressHideLastSeenListener = false
+    private val profilePhotoPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }
+            val encoded = bytes?.let { AvatarUtils.encodeAvatarBase64(it) }
+            if (encoded.isNullOrBlank()) {
+                Toast.makeText(this@SettingsActivity, "Image too large or unreadable", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val result = NativeApi.updateProfile(profilePhotoBase64 = encoded)
+            if (!result.success) {
+                Toast.makeText(this@SettingsActivity, result.error, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            currentProfilePhotoBase64 = encoded
+            renderProfilePreview(currentProfileName, currentProfilePhotoBase64)
+            Toast.makeText(this@SettingsActivity, "Profile photo updated", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -49,8 +82,13 @@ class SettingsActivity : AppCompatActivity() {
         val setupPinBtn = findViewById<MaterialButton>(R.id.setupPinBtn)
         val managePinBtn = findViewById<MaterialButton>(R.id.managePinBtn)
         val editMyNameBtn = findViewById<MaterialButton>(R.id.editMyNameBtn)
+        val changeProfilePhotoBtn = findViewById<MaterialButton>(R.id.changeProfilePhotoBtn)
+        val removeProfilePhotoBtn = findViewById<MaterialButton>(R.id.removeProfilePhotoBtn)
         val changePasswordBtn = findViewById<MaterialButton>(R.id.changePasswordBtn)
         val deleteAccountBtn = findViewById<MaterialButton>(R.id.deleteAccountBtn)
+        hideLastSeenSwitch = findViewById(R.id.hideLastSeenSwitch)
+        profilePhotoPreview = findViewById(R.id.profilePhotoPreview)
+        profilePhotoInitial = findViewById(R.id.profilePhotoInitial)
 
         appLockSwitch.isChecked = AppSecurityPrefs.isAppLockEnabled(this)
         biometricResumeSwitch.isChecked = AppSecurityPrefs.allowBiometricOnResume(this)
@@ -75,8 +113,22 @@ class SettingsActivity : AppCompatActivity() {
         setupPinBtn.setOnClickListener { launchPinSetup() }
         managePinBtn.setOnClickListener { launchPinManager() }
         editMyNameBtn.setOnClickListener { showEditMyNameDialog() }
+        changeProfilePhotoBtn.setOnClickListener { profilePhotoPicker.launch("image/*") }
+        removeProfilePhotoBtn.setOnClickListener { removeProfilePhoto() }
         changePasswordBtn.setOnClickListener { showChangePasswordDialog() }
         deleteAccountBtn.setOnClickListener { showDeleteAccountDialog() }
+        hideLastSeenSwitch.setOnCheckedChangeListener { _, checked ->
+            if (suppressHideLastSeenListener) return@setOnCheckedChangeListener
+            lifecycleScope.launch {
+                val result = NativeApi.updateProfile(hideLastSeen = checked)
+                if (!result.success) {
+                    suppressHideLastSeenListener = true
+                    hideLastSeenSwitch.isChecked = !checked
+                    suppressHideLastSeenListener = false
+                    Toast.makeText(this@SettingsActivity, result.error, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun onResume() {
@@ -84,6 +136,7 @@ class SettingsActivity : AppCompatActivity() {
         val setupPinBtn = findViewById<MaterialButton>(R.id.setupPinBtn)
         val managePinBtn = findViewById<MaterialButton>(R.id.managePinBtn)
         updatePinButtons(setupPinBtn, managePinBtn)
+        loadProfileSettings()
     }
 
     private fun hasRealPin(): Boolean {
@@ -250,6 +303,10 @@ class SettingsActivity : AppCompatActivity() {
                             if (ok) "Name updated" else "Update failed",
                             Toast.LENGTH_SHORT
                         ).show()
+                        if (ok) {
+                            currentProfileName = name
+                            renderProfilePreview(currentProfileName, currentProfilePhotoBase64)
+                        }
                     }
                 }
                 .setNegativeButton("Cancel", null)
@@ -328,5 +385,45 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun loadProfileSettings() {
+        lifecycleScope.launch {
+            val profile = NativeApi.getProfile()
+            if (!profile.success) return@launch
+            currentProfileName = profile.fullName.ifBlank { profile.username.ifBlank { "User" } }
+            currentProfilePhotoBase64 = profile.profilePhotoBase64
+            renderProfilePreview(currentProfileName, currentProfilePhotoBase64)
+            suppressHideLastSeenListener = true
+            hideLastSeenSwitch.isChecked = profile.hideLastSeen
+            suppressHideLastSeenListener = false
+        }
+    }
+
+    private fun renderProfilePreview(displayName: String, photoBase64: String?) {
+        profilePhotoInitial.text = displayName.take(1).uppercase()
+        val avatar = AvatarUtils.decodeBase64Avatar(photoBase64)
+        if (avatar != null) {
+            profilePhotoPreview.setImageBitmap(avatar)
+            profilePhotoPreview.visibility = View.VISIBLE
+            profilePhotoInitial.visibility = View.GONE
+        } else {
+            profilePhotoPreview.setImageDrawable(null)
+            profilePhotoPreview.visibility = View.GONE
+            profilePhotoInitial.visibility = View.VISIBLE
+        }
+    }
+
+    private fun removeProfilePhoto() {
+        lifecycleScope.launch {
+            val result = NativeApi.updateProfile(clearProfilePhoto = true)
+            if (!result.success) {
+                Toast.makeText(this@SettingsActivity, result.error, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            currentProfilePhotoBase64 = null
+            renderProfilePreview(currentProfileName, null)
+            Toast.makeText(this@SettingsActivity, "Profile photo removed", Toast.LENGTH_SHORT).show()
+        }
     }
 }

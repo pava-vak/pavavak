@@ -204,10 +204,11 @@ router.post('/send', isAuthenticated, async (req, res) => {
         }
 
         sendToUser(prisma, receiver, {
-            type: 'new_message',
+            type: parsedMedia ? 'new_message_photo' : 'new_message',
             messageId: message.message_id,
             senderId: message.sender_id,
-            chatUserId: message.sender_id
+            chatUserId: message.sender_id,
+            body: parsedMedia ? 'Photo received' : 'You have a new message'
         }).catch((e) => {
             console.error('[FCM] sendToUser failed:', e.message);
         });
@@ -251,8 +252,8 @@ router.get('/conversations/list', isAuthenticated, async (req, res) => {
                 ]
             },
             include: {
-                user1: { select: { user_id: true, username: true, full_name: true } },
-                user2: { select: { user_id: true, username: true, full_name: true } }
+                user1: { select: { user_id: true, username: true, full_name: true, profile_photo_base64: true } },
+                user2: { select: { user_id: true, username: true, full_name: true, profile_photo_base64: true } }
             }
         });
 
@@ -292,7 +293,8 @@ router.get('/conversations/list', isAuthenticated, async (req, res) => {
                     user: {
                         userId:   otherUser.user_id,
                         username: otherUser.username,
-                        fullName: otherUser.full_name
+                        fullName: otherUser.full_name,
+                        profilePhotoBase64: otherUser.profile_photo_base64
                     },
                     lastMessage: lastMessage ? {
                         content:  lastMessage.content,

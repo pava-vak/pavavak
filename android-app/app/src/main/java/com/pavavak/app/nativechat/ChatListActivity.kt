@@ -114,7 +114,7 @@ class ChatListActivity : AppCompatActivity() {
                 allChats = cachedChats.map { c ->
                     val id = c.chatId.toIntOrNull()
                     if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
-                }
+                }.sortedByDescending { it.lastSentAtEpochMs }
                 applyFilter(searchInput.text?.toString().orEmpty())
                 progress.visibility = View.GONE
                 emptyText.visibility = View.GONE
@@ -160,7 +160,7 @@ class ChatListActivity : AppCompatActivity() {
                 allChats = chats.map { c ->
                     val id = c.chatId.toIntOrNull()
                     if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
-                }
+                }.sortedByDescending { it.lastSentAtEpochMs }
                 applyFilter(searchInput.text?.toString().orEmpty())
                 withContext(Dispatchers.IO) {
                     localStore.cacheConversations(allChats)

@@ -53,9 +53,14 @@ function getFirebaseAdmin() {
 async function sendPushNotification(token, data = {}) {
     try {
         const fb = getFirebaseAdmin();
+        const body = data.body || (data.type === 'new_message_photo' ? 'Photo received' : 'You have a new message');
 
         const message = {
             token,
+            notification: {
+                title: data.title || 'PaVa-Vak',
+                body
+            },
             data: {
                 type: data.type || 'new_message',
                 messageId: String(data.messageId || ''),
@@ -65,10 +70,13 @@ async function sendPushNotification(token, data = {}) {
             },
             android: {
                 priority: 'high',
+                ttl: 60 * 1000,
+                collapseKey: data.chatUserId ? `chat_${data.chatUserId}` : 'chat_updates',
+                directBootOk: true,
                 notification: {
                     channelId: 'messages_secure',
                     title: 'PaVa-Vak',
-                    body: 'You have a new message'
+                    body
                 }
             }
         };
@@ -106,8 +114,24 @@ async function sendToUser(prisma, userId, data = {}) {
         return;
     }
 
+    let unreadCount = Number(data.unreadCount || 0);
+    if (!Number.isFinite(unreadCount) || unreadCount <= 0) {
+        try {
+            unreadCount = await prisma.messages.count({
+                where: {
+                    receiver_id: userId,
+                    is_read: false,
+                    deleted_for_receiver: false
+                }
+            });
+        } catch (err) {
+            console.error('[FCM] Failed to compute unread count:', err.message);
+            unreadCount = 1;
+        }
+    }
+
     const results = await Promise.allSettled(
-        tokens.map(t => sendPushNotification(t.token, data))
+        tokens.map(t => sendPushNotification(t.token, { ...data, unreadCount }))
     );
 
     const invalidTokens = tokens.filter((t, i) => {

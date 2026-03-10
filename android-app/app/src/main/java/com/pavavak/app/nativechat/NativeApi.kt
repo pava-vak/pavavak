@@ -37,11 +37,21 @@ data class ProfileResult(
     val success: Boolean,
     val username: String = "",
     val fullName: String = "",
+    val hideLastSeen: Boolean = false,
+    val profilePhotoBase64: String? = null,
     val error: String = ""
 )
 
 data class BasicResult(
     val success: Boolean,
+    val error: String = ""
+)
+
+data class PresenceResult(
+    val success: Boolean,
+    val isOnline: Boolean = false,
+    val lastSeenAt: String? = null,
+    val isLastSeenHidden: Boolean = false,
     val error: String = ""
 )
 
@@ -187,13 +197,62 @@ object NativeApi {
         ProfileResult(
             success = true,
             username = user.optString("username", ""),
-            fullName = user.optString("fullName", "")
+            fullName = user.optString("fullName", ""),
+            hideLastSeen = user.optBoolean("hideLastSeen", false),
+            profilePhotoBase64 = user.optString("profilePhotoBase64", "").ifBlank { null }
         )
     }
 
     suspend fun updateProfileName(fullName: String): Boolean = withContext(Dispatchers.IO) {
         val body = JSONObject().put("fullName", fullName.trim())
         val json = request("PUT", "/api/users/profile", body) ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun updateProfile(
+        fullName: String? = null,
+        hideLastSeen: Boolean? = null,
+        profilePhotoBase64: String? = null,
+        clearProfilePhoto: Boolean = false
+    ): BasicResult = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+        if (fullName != null) body.put("fullName", fullName.trim())
+        if (hideLastSeen != null) body.put("hideLastSeen", hideLastSeen)
+        if (clearProfilePhoto) {
+            body.put("clearProfilePhoto", true)
+        } else if (profilePhotoBase64 != null) {
+            body.put("profilePhotoBase64", profilePhotoBase64)
+        }
+        val json = request("PUT", "/api/users/profile", body)
+            ?: return@withContext BasicResult(false, "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext BasicResult(false, json.optString("error", "Failed to update profile"))
+        }
+        BasicResult(true)
+    }
+
+    suspend fun getPresence(otherUserId: Int): PresenceResult = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/presence/$otherUserId")
+            ?: return@withContext PresenceResult(false, error = "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext PresenceResult(false, error = json.optString("error", "Failed to fetch presence"))
+        }
+        val presence = json.optJSONObject("presence") ?: JSONObject()
+        PresenceResult(
+            success = true,
+            isOnline = presence.optBoolean("isOnline", false),
+            lastSeenAt = presence.optString("lastSeenAt", "").ifBlank { null },
+            isLastSeenHidden = presence.optBoolean("isLastSeenHidden", false)
+        )
+    }
+
+    suspend fun sendPresenceHeartbeat(): Boolean = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/presence/heartbeat") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun markPresenceOffline(): Boolean = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/presence/offline") ?: return@withContext false
         json.optBoolean("success", false)
     }
 
@@ -232,6 +291,7 @@ object NativeApi {
             val fullName = user.optString("fullName", "")
             val username = user.optString("username", "User")
             val displayName = if (fullName.isNotBlank() && fullName != "null") fullName else username
+            val profilePhotoBase64 = user.optString("profilePhotoBase64", "").ifBlank { null }
 
             val last = c.optJSONObject("lastMessage")
             val contentRaw = last?.optString("content", "") ?: ""
@@ -261,7 +321,8 @@ object NativeApi {
                     lastIsFromMe = isFromMe,
                     lastIsDelivered = isDelivered,
                     lastIsRead = isRead,
-                    lastSentAtEpochMs = parseEpochMillis(sentAt)
+                    lastSentAtEpochMs = parseEpochMillis(sentAt),
+                    profilePhotoBase64 = profilePhotoBase64
                 )
             )
         }
@@ -731,7 +792,7 @@ object NativeApi {
         }
     }
 
-    private fun formatTime(iso: String): String {
+    fun formatTime(iso: String): String {
         if (iso.isBlank()) return ""
         return try {
             val odt = OffsetDateTime.parse(iso)

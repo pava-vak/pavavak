@@ -29,6 +29,7 @@ class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
         // Show immediately from payload so background alerts never depend on API/session.
         val unreadCount = message.data["unreadCount"]?.toIntOrNull() ?: 1
         val hintFromPayload = when (message.data["type"]) {
+            "new_message_photo" -> "Photo received"
             "new_message" -> "You have new messages"
             else -> null
         }
