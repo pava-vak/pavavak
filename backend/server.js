@@ -158,7 +158,9 @@ app.use(passport.session());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/connections', require('./routes/connections'));
+// Legacy connections route is intentionally not mounted.
+// Current app/admin flows use /api/admin/connections and /api/messages/admin/connections/all.
+// The old /api/connections implementation is schema-incompatible and would fail if called.
 app.use('/api/invites', require('./routes/invites'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/diagnostic', require('./routes/diagnostic'));
@@ -396,6 +398,38 @@ io.on('connection', (socket) => {
   socket.on('stop_typing', ({ recipientId }) => {
     if (recipientId) {
       io.to(`user_${recipientId}`).emit('user_typing', { userId, isTyping: false });
+    }
+  });
+
+  socket.on('message_received', async ({ messageId }) => {
+    const numericMessageId = Number.parseInt(messageId, 10);
+    if (!Number.isFinite(numericMessageId) || numericMessageId <= 0) return;
+    try {
+      const message = await prisma.messages.findUnique({
+        where: { message_id: numericMessageId },
+        select: {
+          message_id: true,
+          sender_id: true,
+          receiver_id: true,
+          delivered_at: true
+        }
+      });
+      if (!message || message.receiver_id !== userId) return;
+
+      const deliveredAt = message.delivered_at || new Date();
+      if (!message.delivered_at) {
+        await prisma.messages.update({
+          where: { message_id: numericMessageId },
+          data: { delivered_at: deliveredAt }
+        });
+      }
+
+      io.to(`user_${message.sender_id}`).emit('message_delivered', {
+        messageId: message.message_id,
+        deliveredAt
+      });
+    } catch (e) {
+      console.error('[Socket] message_received ack failed:', e.message);
     }
   });
 

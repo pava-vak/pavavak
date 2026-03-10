@@ -13,12 +13,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.net.URL
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import javax.net.ssl.SSLException
 
 data class LoginResult(
     val success: Boolean,
@@ -59,6 +63,7 @@ object NativeApi {
 
     private val baseUrl: String = BuildConfig.BASE_URL.trimEnd('/')
     private const val TAG = "PaVaVakApi"
+    private const val FRIENDLY_NETWORK_ERROR = "Can't reach the server right now. Check your internet and try again."
     private val IST_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
     private val IST_TIME_FORMAT: DateTimeFormatter =
         DateTimeFormatter.ofPattern("h:mm a", Locale("en", "IN"))
@@ -106,7 +111,10 @@ object NativeApi {
             val isAdmin = json.optJSONObject("user")?.optBoolean("isAdmin", false) ?: false
             val requiresPasswordReset = json.optBoolean("requiresPasswordReset", false) ||
                 (json.optJSONObject("user")?.optBoolean("forcePasswordReset", false) ?: false)
-            val error = json.optString("error", if (ok) "" else "Login failed")
+            val error = friendlyErrorMessage(
+                json.optString("error", if (ok) "" else "Login failed"),
+                "Login failed. Please check your details and try again."
+            )
             if (ok) {
                 cachedSession = SessionInfo(
                     authenticated = true,
@@ -119,7 +127,12 @@ object NativeApi {
             }
             LoginResult(ok, isAdmin, requiresPasswordReset, error)
         } catch (e: Exception) {
-            LoginResult(false, false, false, e.message ?: "Login failed")
+            LoginResult(
+                false,
+                false,
+                false,
+                friendlyThrowableMessage(e, "Login failed. Please try again.")
+            )
         } finally {
             conn?.disconnect()
         }
@@ -133,9 +146,9 @@ object NativeApi {
     suspend fun requestPasswordReset(usernameOrEmail: String): BasicResult = withContext(Dispatchers.IO) {
         val body = JSONObject().put("usernameOrEmail", usernameOrEmail.trim())
         val json = request("POST", "/api/auth/request-password-reset", body)
-            ?: return@withContext BasicResult(false, "Network error")
+            ?: return@withContext BasicResult(false, FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext BasicResult(false, json.optString("error", "Failed"))
+            return@withContext BasicResult(false, friendlyErrorMessage(json.optString("error", ""), "Couldn't send the reset request. Please try again."))
         }
         BasicResult(true)
     }
@@ -143,9 +156,9 @@ object NativeApi {
     suspend fun completePasswordReset(newPassword: String): BasicResult = withContext(Dispatchers.IO) {
         val body = JSONObject().put("newPassword", newPassword)
         val json = request("POST", "/api/auth/complete-password-reset", body)
-            ?: return@withContext BasicResult(false, "Network error")
+            ?: return@withContext BasicResult(false, FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext BasicResult(false, json.optString("error", "Failed"))
+            return@withContext BasicResult(false, friendlyErrorMessage(json.optString("error", ""), "Couldn't update your password. Please try again."))
         }
         BasicResult(true)
     }
@@ -189,9 +202,9 @@ object NativeApi {
 
     suspend fun getProfile(): ProfileResult = withContext(Dispatchers.IO) {
         val json = request("GET", "/api/users/profile")
-            ?: return@withContext ProfileResult(false, error = "No response")
+            ?: return@withContext ProfileResult(false, error = FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext ProfileResult(false, error = json.optString("error", "Failed"))
+            return@withContext ProfileResult(false, error = friendlyErrorMessage(json.optString("error", ""), "Couldn't load your profile right now."))
         }
         val user = json.optJSONObject("user") ?: JSONObject()
         ProfileResult(
@@ -224,18 +237,18 @@ object NativeApi {
             body.put("profilePhotoBase64", profilePhotoBase64)
         }
         val json = request("PUT", "/api/users/profile", body)
-            ?: return@withContext BasicResult(false, "Network error")
+            ?: return@withContext BasicResult(false, FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext BasicResult(false, json.optString("error", "Failed to update profile"))
+            return@withContext BasicResult(false, friendlyErrorMessage(json.optString("error", ""), "Couldn't update your profile. Please try again."))
         }
         BasicResult(true)
     }
 
     suspend fun getPresence(otherUserId: Int): PresenceResult = withContext(Dispatchers.IO) {
         val json = request("GET", "/api/presence/$otherUserId")
-            ?: return@withContext PresenceResult(false, error = "Network error")
+            ?: return@withContext PresenceResult(false, error = FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext PresenceResult(false, error = json.optString("error", "Failed to fetch presence"))
+            return@withContext PresenceResult(false, error = friendlyErrorMessage(json.optString("error", ""), "Couldn't load status right now."))
         }
         val presence = json.optJSONObject("presence") ?: JSONObject()
         PresenceResult(
@@ -261,9 +274,9 @@ object NativeApi {
             .put("currentPassword", currentPassword)
             .put("newPassword", newPassword)
         val json = request("POST", "/api/users/change-password", body)
-            ?: return@withContext BasicResult(false, "Network error")
+            ?: return@withContext BasicResult(false, FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext BasicResult(false, json.optString("error", "Failed to change password"))
+            return@withContext BasicResult(false, friendlyErrorMessage(json.optString("error", ""), "Couldn't change your password. Please try again."))
         }
         BasicResult(true)
     }
@@ -271,9 +284,9 @@ object NativeApi {
     suspend fun deleteMyAccount(password: String): BasicResult = withContext(Dispatchers.IO) {
         val body = JSONObject().put("password", password)
         val json = request("DELETE", "/api/users/delete-account", body)
-            ?: return@withContext BasicResult(false, "Network error")
+            ?: return@withContext BasicResult(false, FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext BasicResult(false, json.optString("error", "Failed to delete account"))
+            return@withContext BasicResult(false, friendlyErrorMessage(json.optString("error", ""), "Couldn't delete the account right now."))
         }
         BasicResult(true)
     }
@@ -452,19 +465,19 @@ object NativeApi {
 
         val json = request("POST", "/api/messages/send", body) ?: return@withContext SendResult(
             success = false,
-            error = "Network error"
+            error = FRIENDLY_NETWORK_ERROR
         )
         if (!json.optBoolean("success", false)) {
             Log.w(TAG, "sendMessage failed response=$json")
             return@withContext SendResult(
                 success = false,
-                error = json.optString("error", "Send failed")
+                error = friendlyErrorMessage(json.optString("error", ""), "Message could not be sent. Please try again.")
             )
         }
 
         val msg = json.optJSONObject("message") ?: return@withContext SendResult(
             success = false,
-            error = "Invalid server response"
+            error = "Something went wrong. Please try again."
         )
         SendResult(
             success = true,
@@ -520,11 +533,11 @@ object NativeApi {
     suspend fun editMessage(messageId: String, content: String): SendResult = withContext(Dispatchers.IO) {
         val body = JSONObject().put("content", content.trim())
         val json = request("PUT", "/api/messages/$messageId/edit", body)
-            ?: return@withContext SendResult(false, error = "Network error")
+            ?: return@withContext SendResult(false, error = FRIENDLY_NETWORK_ERROR)
         if (!json.optBoolean("success", false)) {
-            return@withContext SendResult(false, error = json.optString("error", "Edit failed"))
+            return@withContext SendResult(false, error = friendlyErrorMessage(json.optString("error", ""), "Couldn't update the message. Please try again."))
         }
-        val msg = json.optJSONObject("message") ?: return@withContext SendResult(false, error = "Invalid response")
+        val msg = json.optJSONObject("message") ?: return@withContext SendResult(false, error = "Something went wrong. Please try again.")
         SendResult(
             success = true,
             message = ChatMessage(
@@ -715,6 +728,7 @@ object NativeApi {
                 val obj = args.firstOrNull() as? JSONObject ?: return@on
                 val senderId = obj.optInt("senderId", 0)
                 val receiverId = obj.optInt("receiverId", 0)
+                val messageId = obj.optInt("messageId", 0)
                 val isRelevant =
                     (senderId == chatUserId && receiverId == session.userId) ||
                     (senderId == session.userId && receiverId == chatUserId)
@@ -733,7 +747,7 @@ object NativeApi {
                 }
                 listener.onNewMessage(
                     ChatMessage(
-                        id = obj.optInt("messageId", 0).toString(),
+                        id = messageId.toString(),
                         isMine = senderId == session.userId,
                         text = displayText,
                         time = formatTime(obj.optString("sentAt", "")),
@@ -744,6 +758,9 @@ object NativeApi {
                         remoteMediaId = wire?.mediaId
                     )
                 )
+                if (senderId == chatUserId && receiverId == session.userId && messageId > 0) {
+                    socket.emit("message_received", JSONObject().put("messageId", messageId))
+                }
             }
 
             socket.on("message_delivered") { args ->
@@ -869,11 +886,21 @@ object NativeApi {
             if (code !in 200..299) {
                 Log.w(TAG, "HTTP $method $path failed code=$code body=$text")
             }
-            if (text.isBlank()) return null
-            JSONObject(text)
+            if (text.isBlank()) {
+                if (code in 200..299) return null
+                return requestFailure(defaultFriendlyErrorForPath(path))
+            }
+            val json = runCatching { JSONObject(text) }.getOrNull()
+                ?: return requestFailure(defaultFriendlyErrorForPath(path))
+            if (code !in 200..299 || !json.optBoolean("success", true)) {
+                val rawError = json.optString("error", json.optString("message", ""))
+                json.put("success", false)
+                json.put("error", friendlyErrorMessage(rawError, defaultFriendlyErrorForPath(path)))
+            }
+            json
         } catch (e: Exception) {
             Log.e(TAG, "request failed method=$method path=$path message=${e.message}")
-            null
+            requestFailure(friendlyThrowableMessage(e, defaultFriendlyErrorForPath(path)))
         } finally {
             conn?.disconnect()
         }
@@ -898,6 +925,67 @@ object NativeApi {
             null
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    private fun requestFailure(message: String): JSONObject =
+        JSONObject()
+            .put("success", false)
+            .put("error", message)
+
+    private fun defaultFriendlyErrorForPath(path: String): String {
+        return when {
+            path.contains("/auth/login") -> "Login failed. Please try again."
+            path.contains("/auth/request-password-reset") -> "Couldn't send the reset request. Please try again."
+            path.contains("/auth/complete-password-reset") -> "Couldn't update your password. Please try again."
+            path.contains("/users/change-password") -> "Couldn't change your password. Please try again."
+            path.contains("/users/delete-account") -> "Couldn't delete the account right now."
+            path.contains("/users/profile") -> "Couldn't load your profile right now."
+            path.contains("/presence/") -> "Couldn't load status right now."
+            path.contains("/messages/send") -> "Message could not be sent. Please try again."
+            path.contains("/messages/") -> "Couldn't load messages right now."
+            else -> "Something went wrong. Please try again."
+        }
+    }
+
+    private fun friendlyThrowableMessage(error: Throwable, fallback: String): String {
+        return when (error) {
+            is UnknownHostException -> FRIENDLY_NETWORK_ERROR
+            is ConnectException -> "Couldn't connect right now. Please try again in a moment."
+            is SocketTimeoutException -> "The server is taking too long to respond. Please try again."
+            is SSLException -> "Secure connection failed. Please try again."
+            else -> friendlyErrorMessage(error.message, fallback)
+        }
+    }
+
+    private fun friendlyErrorMessage(raw: String?, fallback: String): String {
+        val text = raw?.trim().orEmpty()
+        if (text.isBlank()) return fallback
+        val lower = text.lowercase(Locale.ROOT)
+        return when {
+            "unable to resolve host" in lower || "no address associated with hostname" in lower ->
+                FRIENDLY_NETWORK_ERROR
+            "timeout" in lower || "timed out" in lower ->
+                "The server is taking too long to respond. Please try again."
+            "failed to connect" in lower || "connection refused" in lower || "connection reset" in lower ->
+                "Couldn't connect right now. Please try again in a moment."
+            "ssl" in lower || "handshake" in lower || "certificate" in lower ->
+                "Secure connection failed. Please try again."
+            "authentication required" in lower || "unauthorized" in lower ->
+                "Please log in again."
+            "admin access required" in lower || "forbidden" in lower ->
+                "You do not have access to this section."
+            "not connected to this user" in lower ->
+                "You can message only approved contacts."
+            "media_too_large" in lower || "image too large" in lower || "file size is big" in lower ->
+                "That file is too large. Please choose a smaller one."
+            "invalid current password" in lower || "current password is incorrect" in lower ->
+                "Current password is incorrect."
+            "user not found" in lower ->
+                "We couldn't find that account."
+            "invalid" in lower && "response" in lower ->
+                "Something went wrong. Please try again."
+            else -> fallback
         }
     }
 }

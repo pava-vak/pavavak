@@ -150,14 +150,19 @@ class MessageAdapter(
                 item.isRead -> {
                     holder.ticks.text = "\u2713\u2713"
                     holder.ticks.setTextColor(
-                        ContextCompat.getColor(holder.itemView.context, R.color.accent_primary)
+                        android.graphics.Color.parseColor("#D9F6FF")
                     )
                 }
-                else -> {
-                    // Any non-sending server message is treated as delivered in UI.
+                item.isDelivered -> {
                     holder.ticks.text = "\u2713\u2713"
                     holder.ticks.setTextColor(
                         adjustAlpha(ContextCompat.getColor(holder.itemView.context, android.R.color.white), 0.82f)
+                    )
+                }
+                else -> {
+                    holder.ticks.text = "\u2713"
+                    holder.ticks.setTextColor(
+                        adjustAlpha(ContextCompat.getColor(holder.itemView.context, android.R.color.white), 0.72f)
                     )
                 }
             }

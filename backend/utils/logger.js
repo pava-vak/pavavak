@@ -14,12 +14,12 @@ const LogLevel = {
 // Log activity to database
 async function logActivity(action, metadata = {}, level = LogLevel.INFO) {
   try {
-    await prisma.systemLog.create({
+    await prisma.system_logs.create({
       data: {
         level,
         action,
         message: generateMessage(action, metadata),
-        metadata: metadata
+        metadata: safeMetadata(metadata)
       }
     });
 
@@ -95,7 +95,7 @@ async function getRecentLogs(limit = 100, level = null) {
   try {
     const where = level ? { level } : {};
     
-    const logs = await prisma.systemLog.findMany({
+    const logs = await prisma.system_logs.findMany({
       where,
       orderBy: { timestamp: 'desc' },
       take: limit
@@ -142,7 +142,7 @@ async function searchLogs(query, options = {}) {
       if (endDate) where.timestamp.lte = new Date(endDate);
     }
 
-    const logs = await prisma.systemLog.findMany({
+    const logs = await prisma.system_logs.findMany({
       where,
       orderBy: { timestamp: 'desc' },
       take: limit
@@ -161,7 +161,7 @@ async function cleanOldLogs() {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - 90);
 
-    const result = await prisma.systemLog.deleteMany({
+    const result = await prisma.system_logs.deleteMany({
       where: {
         timestamp: { lt: cutoffDate },
         level: { not: 'ERROR' } // Keep errors longer
@@ -188,6 +188,14 @@ async function exportLogs(options = {}) {
   } catch (error) {
     console.error('Log export failed:', error);
     return null;
+  }
+}
+
+function safeMetadata(metadata) {
+  try {
+    return JSON.stringify(metadata ?? {});
+  } catch (_) {
+    return JSON.stringify({ note: 'metadata serialization failed' });
   }
 }
 

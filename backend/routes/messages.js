@@ -140,8 +140,6 @@ router.post('/send', isAuthenticated, async (req, res) => {
         }
 
         const io = req.app.get('io');
-        const onlineUsers = req.app.get('onlineUsers');
-        const isReceiverOnline = !!(onlineUsers && onlineUsers.has(receiver));
 
         const parsedMedia = parseInlineImage(content.trim());
         let messageContent = content.trim();
@@ -156,7 +154,7 @@ router.post('/send', isAuthenticated, async (req, res) => {
                     receiver_id: receiver,
                     content: messageContent,
                     is_read: false,
-                    delivered_at: isReceiverOnline ? new Date() : null
+                    delivered_at: null
                 }
             });
 
@@ -209,12 +207,6 @@ router.post('/send', isAuthenticated, async (req, res) => {
                 isEdited: !!message.edited_at
             });
 
-            if (isReceiverOnline) {
-                io.to(`user_${senderId}`).emit('message_delivered', {
-                    messageId: message.message_id,
-                    deliveredAt: message.delivered_at || new Date()
-                });
-            }
         }
 
         sendToUser(prisma, receiver, {
