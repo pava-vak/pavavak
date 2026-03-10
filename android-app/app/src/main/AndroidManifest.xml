@@ -96,6 +96,10 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".notifications.NotificationActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

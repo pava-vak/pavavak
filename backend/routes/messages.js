@@ -34,6 +34,16 @@ function parseInlineImage(content) {
     }
 }
 
+function extractNotificationPreview(content) {
+    const wire = decodeWirePayload(content);
+    if (wire?.t === 'chat') {
+        if (wire.imageBase64 || wire.mediaId) return 'Photo received';
+        if (wire.text && String(wire.text).trim()) return String(wire.text).trim().slice(0, 140);
+    }
+    if (typeof content !== 'string') return 'New message';
+    return content.trim().slice(0, 140) || 'New message';
+}
+
 // â”€â”€â”€ HELPER: verify connection between two users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getConnection(userId1, userId2) {
     return prisma.connections.findFirst({
@@ -135,6 +145,9 @@ router.post('/send', isAuthenticated, async (req, res) => {
 
         const parsedMedia = parseInlineImage(content.trim());
         let messageContent = content.trim();
+        const senderName = (req.user.full_name && String(req.user.full_name).trim())
+            || (req.user.username && String(req.user.username).trim())
+            || `User ${senderId}`;
 
         const message = await prisma.$transaction(async (tx) => {
             const created = await tx.messages.create({
@@ -209,7 +222,9 @@ router.post('/send', isAuthenticated, async (req, res) => {
             messageId: message.message_id,
             senderId: message.sender_id,
             chatUserId: message.sender_id,
-            body: parsedMedia ? 'Photo received' : 'You have a new message'
+            senderName,
+            previewText: extractNotificationPreview(message.content),
+            sentAt: message.sent_at ? new Date(message.sent_at).toISOString() : ''
         }).catch((e) => {
             console.error('[FCM] sendToUser failed:', e.message);
         });

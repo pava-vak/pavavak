@@ -17,18 +17,22 @@ class MessageNotificationWorker(
             val session = NativeApi.getSession()
             if (!session.authenticated) {
                 saveLastUnread(0)
-                NotificationHelper.showHiddenMessageNotification(applicationContext, 0)
+                NotificationHelper.cancelAllMessageNotifications(applicationContext)
                 return Result.success()
             }
 
             val unread = NativeApi.getTotalUnreadCount()
-            val hint = if (unread > 0) NativeApi.getUnreadNotificationHint() else null
+            val hint = if (unread > 0 && NotificationPrefs.previewMode(applicationContext) == NotificationPrefs.PREVIEW_FULL) {
+                NativeApi.getUnreadNotificationHint()
+            } else {
+                null
+            }
             val last = getLastUnread()
 
             if (unread <= 0) {
-                NotificationHelper.showHiddenMessageNotification(applicationContext, 0)
+                NotificationHelper.cancelAllMessageNotifications(applicationContext)
             } else if (unread != last) {
-                NotificationHelper.showHiddenMessageNotification(applicationContext, unread, hint)
+                NotificationHelper.showSummaryNotification(applicationContext, unread, hint)
             }
 
             saveLastUnread(unread)

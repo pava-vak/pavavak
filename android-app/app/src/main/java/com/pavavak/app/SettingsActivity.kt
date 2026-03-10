@@ -17,17 +17,25 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.pavavak.app.nativechat.NativeApi
+import com.pavavak.app.notifications.NotificationHelper
+import com.pavavak.app.notifications.NotificationPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var hideLastSeenSwitch: SwitchMaterial
+    private lateinit var notificationsEnabledSwitch: SwitchMaterial
+    private lateinit var notificationDirectReplySwitch: SwitchMaterial
+    private lateinit var notificationMarkReadSwitch: SwitchMaterial
+    private lateinit var notificationPreviewModeBtn: MaterialButton
+    private lateinit var notificationStealthBtn: MaterialButton
     private lateinit var profilePhotoPreview: ImageView
     private lateinit var profilePhotoInitial: TextView
     private var currentProfileName: String = "User"
     private var currentProfilePhotoBase64: String? = null
     private var suppressHideLastSeenListener = false
+    private var suppressNotificationListeners = false
     private val profilePhotoPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
@@ -87,6 +95,11 @@ class SettingsActivity : AppCompatActivity() {
         val changePasswordBtn = findViewById<MaterialButton>(R.id.changePasswordBtn)
         val deleteAccountBtn = findViewById<MaterialButton>(R.id.deleteAccountBtn)
         hideLastSeenSwitch = findViewById(R.id.hideLastSeenSwitch)
+        notificationsEnabledSwitch = findViewById(R.id.notificationsEnabledSwitch)
+        notificationDirectReplySwitch = findViewById(R.id.notificationDirectReplySwitch)
+        notificationMarkReadSwitch = findViewById(R.id.notificationMarkReadSwitch)
+        notificationPreviewModeBtn = findViewById(R.id.notificationPreviewModeBtn)
+        notificationStealthBtn = findViewById(R.id.notificationStealthBtn)
         profilePhotoPreview = findViewById(R.id.profilePhotoPreview)
         profilePhotoInitial = findViewById(R.id.profilePhotoInitial)
 
@@ -117,6 +130,13 @@ class SettingsActivity : AppCompatActivity() {
         removeProfilePhotoBtn.setOnClickListener { removeProfilePhoto() }
         changePasswordBtn.setOnClickListener { showChangePasswordDialog() }
         deleteAccountBtn.setOnClickListener { showDeleteAccountDialog() }
+        notificationPreviewModeBtn.setOnClickListener { showNotificationPreviewPicker() }
+        notificationStealthBtn.setOnClickListener {
+            NotificationPrefs.enableStealthFor(this, 60L * 60L * 1000L)
+            renderNotificationSettings()
+            lifecycleScope.launch { NotificationHelper.refreshSummaryNotification(this@SettingsActivity) }
+            Toast.makeText(this, "Stealth mode enabled for 1 hour", Toast.LENGTH_SHORT).show()
+        }
         hideLastSeenSwitch.setOnCheckedChangeListener { _, checked ->
             if (suppressHideLastSeenListener) return@setOnCheckedChangeListener
             lifecycleScope.launch {
@@ -129,6 +149,20 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+        notificationsEnabledSwitch.setOnCheckedChangeListener { _, checked ->
+            if (suppressNotificationListeners) return@setOnCheckedChangeListener
+            NotificationPrefs.setNotificationsEnabled(this, checked)
+            renderNotificationSettings()
+            lifecycleScope.launch { NotificationHelper.refreshSummaryNotification(this@SettingsActivity) }
+        }
+        notificationDirectReplySwitch.setOnCheckedChangeListener { _, checked ->
+            if (suppressNotificationListeners) return@setOnCheckedChangeListener
+            NotificationPrefs.setDirectReplyEnabled(this, checked)
+        }
+        notificationMarkReadSwitch.setOnCheckedChangeListener { _, checked ->
+            if (suppressNotificationListeners) return@setOnCheckedChangeListener
+            NotificationPrefs.setMarkReadEnabled(this, checked)
+        }
     }
 
     override fun onResume() {
@@ -137,6 +171,7 @@ class SettingsActivity : AppCompatActivity() {
         val managePinBtn = findViewById<MaterialButton>(R.id.managePinBtn)
         updatePinButtons(setupPinBtn, managePinBtn)
         loadProfileSettings()
+        renderNotificationSettings()
     }
 
     private fun hasRealPin(): Boolean {
@@ -425,5 +460,57 @@ class SettingsActivity : AppCompatActivity() {
             renderProfilePreview(currentProfileName, null)
             Toast.makeText(this@SettingsActivity, "Profile photo removed", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun renderNotificationSettings() {
+        suppressNotificationListeners = true
+        notificationsEnabledSwitch.isChecked = NotificationPrefs.notificationsEnabled(this)
+        notificationDirectReplySwitch.isChecked = NotificationPrefs.directReplyEnabled(this)
+        notificationMarkReadSwitch.isChecked = NotificationPrefs.markReadEnabled(this)
+
+        val previewLabel = when (NotificationPrefs.rawPreviewMode(this)) {
+            NotificationPrefs.PREVIEW_FULL -> "Full preview"
+            NotificationPrefs.PREVIEW_HIDDEN -> "Hidden"
+            else -> "Name only"
+        }
+        val stealthUntil = NotificationPrefs.stealthUntilMs(this)
+        val stealthActive = NotificationPrefs.isStealthActive(this)
+        notificationPreviewModeBtn.text = if (stealthActive) {
+            "Notification Preview: Hidden (Stealth active)"
+        } else {
+            "Notification Preview: $previewLabel"
+        }
+        notificationStealthBtn.text = if (stealthActive) {
+            "Stealth active until ${java.text.SimpleDateFormat("h:mm a", java.util.Locale("en", "IN")).format(java.util.Date(stealthUntil))}"
+        } else {
+            "Enable Stealth Mode for 1 Hour"
+        }
+
+        notificationPreviewModeBtn.isEnabled = notificationsEnabledSwitch.isChecked
+        notificationStealthBtn.isEnabled = notificationsEnabledSwitch.isChecked
+        notificationDirectReplySwitch.isEnabled = notificationsEnabledSwitch.isChecked
+        notificationMarkReadSwitch.isEnabled = notificationsEnabledSwitch.isChecked
+        suppressNotificationListeners = false
+    }
+
+    private fun showNotificationPreviewPicker() {
+        val labels = arrayOf("Hidden", "Name only", "Full preview")
+        val values = intArrayOf(
+            NotificationPrefs.PREVIEW_HIDDEN,
+            NotificationPrefs.PREVIEW_NAME_ONLY,
+            NotificationPrefs.PREVIEW_FULL
+        )
+        val checked = values.indexOf(NotificationPrefs.rawPreviewMode(this)).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Notification privacy")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                NotificationPrefs.clearStealth(this)
+                NotificationPrefs.setPreviewMode(this, values[which])
+                renderNotificationSettings()
+                lifecycleScope.launch { NotificationHelper.refreshSummaryNotification(this@SettingsActivity) }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

@@ -53,31 +53,23 @@ function getFirebaseAdmin() {
 async function sendPushNotification(token, data = {}) {
     try {
         const fb = getFirebaseAdmin();
-        const body = data.body || (data.type === 'new_message_photo' ? 'Photo received' : 'You have a new message');
-
         const message = {
             token,
-            notification: {
-                title: data.title || 'PaVa-Vak',
-                body
-            },
             data: {
                 type: data.type || 'new_message',
                 messageId: String(data.messageId || ''),
                 senderId: String(data.senderId || ''),
                 chatUserId: String(data.chatUserId || ''),
-                unreadCount: String(data.unreadCount || 1)
+                unreadCount: String(data.unreadCount || 1),
+                senderName: String(data.senderName || ''),
+                previewText: String(data.previewText || ''),
+                sentAt: String(data.sentAt || '')
             },
             android: {
                 priority: 'high',
                 ttl: 60 * 1000,
                 collapseKey: data.chatUserId ? `chat_${data.chatUserId}` : 'chat_updates',
-                directBootOk: true,
-                notification: {
-                    channelId: 'messages_secure',
-                    title: 'PaVa-Vak',
-                    body
-                }
+                directBootOk: true
             }
         };
 

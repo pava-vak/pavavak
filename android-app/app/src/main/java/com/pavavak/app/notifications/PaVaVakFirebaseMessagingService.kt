@@ -3,6 +3,7 @@ package com.pavavak.app.notifications
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.pavavak.app.PaVaVakApp
 import com.pavavak.app.nativechat.NativeApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,32 +26,30 @@ class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-
-        // Show immediately from payload so background alerts never depend on API/session.
-        val unreadCount = message.data["unreadCount"]?.toIntOrNull() ?: 1
-        val hintFromPayload = when (message.data["type"]) {
-            "new_message_photo" -> "Photo received"
-            "new_message" -> "You have new messages"
-            else -> null
-        }
-        NotificationHelper.ensureChannels(this@PaVaVakFirebaseMessagingService)
-        NotificationHelper.showHiddenMessageNotification(
-            this@PaVaVakFirebaseMessagingService,
-            unreadCount,
-            hintFromPayload
+        val payload = NotificationPayload(
+            chatUserId = message.data["chatUserId"]?.toIntOrNull() ?: 0,
+            senderId = message.data["senderId"]?.toIntOrNull() ?: 0,
+            senderName = message.data["senderName"].orEmpty(),
+            previewText = message.data["previewText"],
+            type = message.data["type"].orEmpty().ifBlank { "new_message" },
+            unreadCount = message.data["unreadCount"]?.toIntOrNull() ?: 1,
+            messageId = message.data["messageId"].orEmpty(),
+            sentAtIso = message.data["sentAt"]
         )
+        NotificationHelper.ensureChannels(this@PaVaVakFirebaseMessagingService)
 
-        // Best-effort refinement from backend (do not block initial alert).
+        val activeChatId = NotificationPrefs.activeChatId(this)
+        val suppressForActiveChat = PaVaVakApp.isProcessInForeground &&
+            activeChatId != null &&
+            activeChatId == payload.chatUserId
+
+        if (!suppressForActiveChat) {
+            NotificationHelper.showIncomingMessageNotification(this@PaVaVakFirebaseMessagingService, payload)
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             runCatching {
-                val hint = if (unreadCount > 0) NativeApi.getUnreadNotificationHint() else null
-                if (!hint.isNullOrBlank()) {
-                    NotificationHelper.showHiddenMessageNotification(
-                        this@PaVaVakFirebaseMessagingService,
-                        unreadCount,
-                        hint
-                    )
-                }
+                NotificationHelper.refreshSummaryNotification(this@PaVaVakFirebaseMessagingService)
             }
         }
     }

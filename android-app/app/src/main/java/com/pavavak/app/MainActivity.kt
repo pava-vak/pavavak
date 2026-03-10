@@ -4,9 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.pavavak.app.nativechat.ChatActivity
 import com.pavavak.app.nativechat.ChatListActivity
 import com.pavavak.app.nativechat.NativeApi
 import com.pavavak.app.notifications.NotificationBootstrap
+import com.pavavak.app.notifications.NotificationHelper
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -38,6 +40,12 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
+            if (NotificationHelper.notificationIntentWantsChat(intent)) {
+                AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
+                openLaunchTarget()
+                return@launch
+            }
+
             if (session.isAdmin) {
                 AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
                 startActivity(
@@ -64,7 +72,7 @@ class MainActivity : AppCompatActivity() {
                 AppSecurityPrefs.setDecoyModeActive(this@MainActivity, decoy)
             }
 
-            openNativeChat()
+            openLaunchTarget()
         }
     }
 
@@ -73,10 +81,22 @@ class MainActivity : AppCompatActivity() {
             .getString("real_pin_hash", null) != null
     }
 
-    private fun openNativeChat() {
-        startActivity(
+    private fun openLaunchTarget() {
+        val targetIntent = if (NotificationHelper.notificationIntentWantsChat(intent)) {
+            val chatUserId = NotificationHelper.notificationChatId(intent)
+            val chatName = NotificationHelper.notificationChatName(intent)
+            if (chatUserId > 0) {
+                Intent(this, ChatActivity::class.java)
+                    .putExtra(ChatActivity.EXTRA_CHAT_ID, chatUserId.toString())
+                    .putExtra(ChatActivity.EXTRA_CHAT_NAME, chatName.ifBlank { "Chat" })
+            } else {
+                Intent(this, ChatListActivity::class.java)
+            }
+        } else {
             Intent(this, ChatListActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        startActivity(
+            targetIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         )
         finish()
     }

@@ -39,12 +39,14 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
             LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_START -> {
+                        isProcessInForeground = true
                         appScope.launch {
                             runCatching { NativeApi.sendPresenceHeartbeat() }
                             runCatching { NativeApi.registerFcmTokenFromPrefs(this@PaVaVakApp) }
                         }
                     }
                     Lifecycle.Event.ON_STOP -> {
+                        isProcessInForeground = false
                         // Reliable app-level background marker (covers minimize/app switch).
                         AppSecurityPrefs.setLastBackgroundAt(this, System.currentTimeMillis())
                         AppSecurityPrefs.setLockRequiredOnResume(this, true)
@@ -173,4 +175,9 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
     override fun onActivityPaused(activity: Activity) = Unit
     override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
+
+    companion object {
+        @Volatile
+        var isProcessInForeground: Boolean = false
+    }
 }

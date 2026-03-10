@@ -35,6 +35,8 @@ import com.pavavak.app.R
 import com.pavavak.app.data.local.LocalChatStore
 import com.pavavak.app.data.local.LocalDatabaseProvider
 import com.pavavak.app.data.local.model.LocalMessageSyncStatus
+import com.pavavak.app.notifications.NotificationHelper
+import com.pavavak.app.notifications.NotificationPrefs
 import com.pavavak.app.sync.PendingSyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -220,6 +222,8 @@ class ChatActivity : AppCompatActivity() {
         if (!::toolbar.isInitialized || !::localStore.isInitialized || !::syncStatusChip.isInitialized) {
             return
         }
+        NotificationPrefs.setActiveChatId(this, otherUserId)
+        NotificationHelper.cancelChatNotification(this, otherUserId)
         startAutoRefresh()
         lifecycleScope.launch {
             realtimeConnected = NativeApi.connectRealtime(otherUserId, object : NativeApi.RealtimeListener {
@@ -252,6 +256,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        NotificationPrefs.setActiveChatId(this, null)
         refreshJob?.cancel()
         refreshJob = null
         typingGuardJob?.cancel()

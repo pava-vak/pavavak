@@ -4,8 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/screen_bg"
-    android:paddingBottom="16dp">
+    android:background="@color/screen_bg">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/settingsToolbar"
@@ -16,207 +15,277 @@
         android:titleTextColor="@color/text_primary"
         app:navigationIcon="@android:drawable/ic_menu_revert" />
 
-    <TextView
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:paddingHorizontal="16dp"
-        android:text="Theme"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingHorizontal="16dp"
-        android:text="Switch between light and dark UI mode."
-        android:textColor="@color/text_secondary"
-        android:textSize="13sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="16dp">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/themeLightBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Light Mode" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:paddingHorizontal="16dp"
+                android:text="Theme"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/themeDarkBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Dark Mode" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:text="Switch between light and dark UI mode."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/colorComboBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Color Combo: Ocean" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/themeLightBtn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Light Mode" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:paddingHorizontal="16dp"
-        android:text="Profile"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/themeDarkBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Dark Mode" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/editMyNameBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Edit My Name (Both Ends)" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/colorComboBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Color Combo: Ocean" />
 
-    <FrameLayout
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginStart="16dp">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:paddingHorizontal="16dp"
+                android:text="Notifications"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-        <com.google.android.material.imageview.ShapeableImageView
-            android:id="@+id/profilePhotoPreview"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="@drawable/bg_avatar_circle"
-            android:clipToOutline="true"
-            android:scaleType="centerCrop"
-            android:visibility="gone" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/notificationsEnabledSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Enable message notifications" />
 
-        <TextView
-            android:id="@+id/profilePhotoInitial"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="@drawable/bg_avatar_circle"
-            android:gravity="center"
-            android:text="U"
-            android:textColor="@color/text_primary"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-    </FrameLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/notificationPreviewModeBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Notification Preview: Name only" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/changeProfilePhotoBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Add / Change Profile Photo" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/notificationDirectReplySwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Allow direct reply from notification" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/removeProfilePhotoBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Remove Profile Photo" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/notificationMarkReadSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Allow mark read from notification" />
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/hideLastSeenSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Hide my last seen from other users" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/notificationStealthBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Enable Stealth Mode for 1 Hour" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:paddingHorizontal="16dp"
-        android:text="Account Security"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:text="Hidden mode keeps lockscreen and notification shade private. Name only shows who messaged you. Full preview shows message text and photo alerts."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/changePasswordBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Change Password" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:paddingHorizontal="16dp"
+                android:text="Profile"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/deleteAccountBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Delete My Account"
-        android:textColor="#B00020" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editMyNameBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Edit My Name (Both Ends)" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:paddingHorizontal="16dp"
-        android:text="App Lock"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+            <FrameLayout
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="16dp">
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/appLockSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:text="Require lock on return to app" />
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/profilePhotoPreview"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/bg_avatar_circle"
+                    android:clipToOutline="true"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/biometricResumeSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:text="Allow biometric on app resume" />
+                <TextView
+                    android:id="@+id/profilePhotoInitial"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/bg_avatar_circle"
+                    android:gravity="center"
+                    android:text="U"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/hideRecentsSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:text="Hide app content in recents/app switcher" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/changeProfilePhotoBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Add / Change Profile Photo" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/lockTimeoutBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Lock timeout: Immediate" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/removeProfilePhotoBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Remove Profile Photo" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/setupPinBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Set PIN" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/hideLastSeenSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Hide my last seen from other users" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/managePinBtn"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginHorizontal="16dp"
-        android:text="Manage PIN / Decoy PIN" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:paddingHorizontal="16dp"
+                android:text="Account Security"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/changePasswordBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Change Password" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/deleteAccountBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Delete My Account"
+                android:textColor="#B00020" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:paddingHorizontal="16dp"
+                android:text="App Lock"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/appLockSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Require lock on return to app" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/biometricResumeSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Allow biometric on app resume" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/hideRecentsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:text="Hide app content in recents/app switcher" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lockTimeoutBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Lock timeout: Immediate" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/setupPinBtn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Set PIN" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/managePinBtn"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginHorizontal="16dp"
+                android:text="Manage PIN / Decoy PIN" />
+
+        </LinearLayout>
+    </ScrollView>
 
 </LinearLayout>
-
