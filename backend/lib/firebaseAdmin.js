@@ -1,32 +1,51 @@
 // backend/lib/firebaseAdmin.js
-// Firebase Admin SDK — singleton, lazy-initialized
+// Firebase Admin SDK - singleton, lazy-initialized with Cloud Run friendly fallbacks.
 
 const admin = require('firebase-admin');
-const fs    = require('fs');
+const fs = require('fs');
 
 let initialized = false;
 
 function getFirebaseAdmin() {
     if (initialized) return admin;
 
-    const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+    const keyJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    const keyPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
-    if (!keyPath) {
-        throw new Error('[FCM] FIREBASE_SERVICE_ACCOUNT_PATH not set in .env');
+    try {
+        if (keyJson) {
+            const serviceAccount = JSON.parse(keyJson);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            initialized = true;
+            console.log('[FCM] Firebase Admin initialized via FIREBASE_SERVICE_ACCOUNT_JSON');
+            return admin;
+        }
+
+        if (keyPath) {
+            if (!fs.existsSync(keyPath)) {
+                throw new Error(`Service account file not found at: ${keyPath}`);
+            }
+            const serviceAccount = require(keyPath);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            initialized = true;
+            console.log(`[FCM] Firebase Admin initialized via key file (${keyPath})`);
+            return admin;
+        }
+
+        // Cloud Run / GCE default credentials fallback.
+        admin.initializeApp({
+            credential: admin.credential.applicationDefault()
+        });
+        initialized = true;
+        console.log('[FCM] Firebase Admin initialized via application default credentials');
+        return admin;
+    } catch (e) {
+        throw new Error(`[FCM] Firebase Admin init failed: ${e.message}`);
     }
-    if (!fs.existsSync(keyPath)) {
-        throw new Error(`[FCM] Service account file not found at: ${keyPath}`);
-    }
-
-    const serviceAccount = require(keyPath);
-
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
-
-    initialized = true;
-    console.log('[FCM] Firebase Admin initialized ✅');
-    return admin;
 }
 
 // Send FCM notification to a single token
@@ -37,19 +56,19 @@ async function sendPushNotification(token, data = {}) {
 
         const message = {
             token,
-            // Hidden payload — no message content for privacy
             data: {
-                type:       data.type       || 'new_message',
-                messageId:  String(data.messageId  || ''),
-                senderId:   String(data.senderId   || ''),
-                chatUserId: String(data.chatUserId || '')
+                type: data.type || 'new_message',
+                messageId: String(data.messageId || ''),
+                senderId: String(data.senderId || ''),
+                chatUserId: String(data.chatUserId || ''),
+                unreadCount: String(data.unreadCount || 1)
             },
             android: {
                 priority: 'high',
                 notification: {
                     channelId: 'messages_secure',
-                    title:     'PaVa-Vak',
-                    body:      'You have a new message'
+                    title: 'PaVa-Vak',
+                    body: 'You have a new message'
                 }
             }
         };
@@ -58,7 +77,6 @@ async function sendPushNotification(token, data = {}) {
         return 'ok';
 
     } catch (err) {
-        // Token no longer valid — mark as inactive in DB
         if (
             err.code === 'messaging/registration-token-not-registered' ||
             err.code === 'messaging/invalid-registration-token'
@@ -83,13 +101,15 @@ async function sendToUser(prisma, userId, data = {}) {
         return;
     }
 
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+        console.warn(`[FCM] No active tokens for user ${userId}`);
+        return;
+    }
 
     const results = await Promise.allSettled(
         tokens.map(t => sendPushNotification(t.token, data))
     );
 
-    // Deactivate invalid tokens
     const invalidTokens = tokens.filter((t, i) => {
         const r = results[i];
         return r.status === 'fulfilled' && r.value === 'invalid';
@@ -98,15 +118,19 @@ async function sendToUser(prisma, userId, data = {}) {
     if (invalidTokens.length > 0) {
         await prisma.device_tokens.updateMany({
             where: { id: { in: invalidTokens.map(t => t.id) } },
-            data:  { is_active: false }
+            data: { is_active: false }
         }).catch(e => console.error('[FCM] Error deactivating tokens:', e.message));
 
         console.log(`[FCM] Deactivated ${invalidTokens.length} invalid token(s) for user ${userId}`);
     }
 
     const okCount = results.filter(r => r.status === 'fulfilled' && r.value === 'ok').length;
+    const errCount = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === 'error')).length;
     if (okCount > 0) {
         console.log(`[FCM] Sent ${okCount}/${tokens.length} notification(s) to user ${userId}`);
+    }
+    if (errCount > 0) {
+        console.warn(`[FCM] Failed ${errCount}/${tokens.length} notification(s) for user ${userId}`);
     }
 }
 

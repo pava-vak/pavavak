@@ -24,7 +24,11 @@ import com.pavavak.app.LoginActivity
 import com.pavavak.app.R
 import com.pavavak.app.SettingsActivity
 import com.pavavak.app.UserWebActivity
+import com.pavavak.app.data.local.LocalChatStore
+import com.pavavak.app.data.local.LocalDatabaseProvider
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChatListActivity : AppCompatActivity() {
 
@@ -34,6 +38,7 @@ class ChatListActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var searchInput: TextInputEditText
     private lateinit var newChatFab: FloatingActionButton
+    private lateinit var localStore: LocalChatStore
     private var allChats: List<ChatSummary> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +58,7 @@ class ChatListActivity : AppCompatActivity() {
         newChatFab.setOnClickListener {
             openChatByUserIdDialog()
         }
+        localStore = LocalChatStore(LocalDatabaseProvider.get(this))
 
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -103,11 +109,24 @@ class ChatListActivity : AppCompatActivity() {
         swipeRefresh.isRefreshing = false
 
         lifecycleScope.launch {
+            val cachedChats = withContext(Dispatchers.IO) { localStore.readCachedConversations() }
+            if (cachedChats.isNotEmpty()) {
+                allChats = cachedChats.map { c ->
+                    val id = c.chatId.toIntOrNull()
+                    if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
+                }
+                applyFilter(searchInput.text?.toString().orEmpty())
+                progress.visibility = View.GONE
+                emptyText.visibility = View.GONE
+            }
+
             val session = NativeApi.getSession()
             if (!session.authenticated) {
                 progress.visibility = View.GONE
-                emptyText.visibility = View.VISIBLE
-                emptyText.text = "Session expired. Please login again."
+                if (allChats.isEmpty()) {
+                    emptyText.visibility = View.VISIBLE
+                    emptyText.text = "Session expired. Please login again."
+                }
                 return@launch
             }
 
@@ -137,11 +156,19 @@ class ChatListActivity : AppCompatActivity() {
             }
             progress.visibility = View.GONE
             swipeRefresh.isRefreshing = false
-            allChats = chats.map { c ->
-                val id = c.chatId.toIntOrNull()
-                if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
+            if (chats.isNotEmpty()) {
+                allChats = chats.map { c ->
+                    val id = c.chatId.toIntOrNull()
+                    if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
+                }
+                applyFilter(searchInput.text?.toString().orEmpty())
+                withContext(Dispatchers.IO) {
+                    localStore.cacheConversations(allChats)
+                }
+            } else if (allChats.isEmpty()) {
+                allChats = emptyList()
+                applyFilter(searchInput.text?.toString().orEmpty())
             }
-            applyFilter(searchInput.text?.toString().orEmpty())
             if (allChats.isEmpty()) {
                 emptyText.visibility = View.VISIBLE
                 emptyText.text = if (session.isAdmin) {

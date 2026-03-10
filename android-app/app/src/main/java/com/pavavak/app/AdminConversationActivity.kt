@@ -111,12 +111,21 @@ class AdminConversationActivity : AppCompatActivity() {
     }
 
     private fun confirmDeleteOne(messageId: Int) {
+        val scopes = arrayOf(
+            "Delete for all",
+            "Delete sender side",
+            "Delete receiver side"
+        )
         AlertDialog.Builder(this)
             .setTitle("Delete message")
-            .setMessage("Delete this message from server for everyone?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setItems(scopes) { _, which ->
+                val scope = when (which) {
+                    1 -> "sender"
+                    2 -> "receiver"
+                    else -> "all"
+                }
                 lifecycleScope.launch {
-                    val ok = NativeApi.adminDeleteMessage(messageId)
+                    val ok = NativeApi.adminDeleteMessage(messageId, scope)
                     if (!ok) Toast.makeText(this@AdminConversationActivity, "Delete failed", Toast.LENGTH_SHORT).show()
                     load()
                 }
@@ -129,15 +138,24 @@ class AdminConversationActivity : AppCompatActivity() {
         val ids = adapter.selectedIds().toList()
         if (ids.isEmpty()) return
 
+        val scopes = arrayOf(
+            "Delete all selected for all",
+            "Delete all selected sender side",
+            "Delete all selected receiver side"
+        )
         AlertDialog.Builder(this)
             .setTitle("Delete selected")
-            .setMessage("Delete ${ids.size} selected message(s) from server for everyone?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setItems(scopes) { _, which ->
+                val scope = when (which) {
+                    1 -> "sender"
+                    2 -> "receiver"
+                    else -> "all"
+                }
                 lifecycleScope.launch {
                     var failed = 0
                     withContext(Dispatchers.IO) {
                         ids.forEach { id ->
-                            if (!NativeApi.adminDeleteMessage(id)) failed++
+                            if (!NativeApi.adminDeleteMessage(id, scope)) failed++
                         }
                     }
                     adapter.exitSelection()

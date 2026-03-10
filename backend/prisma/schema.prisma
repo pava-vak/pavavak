@@ -23,6 +23,10 @@ model users {
   last_login         DateTime?
   reset_token        String?
   reset_token_expiry DateTime?
+  reset_otp_hash     String?
+  reset_otp_expiry   DateTime?
+  reset_otp_used_at  DateTime?
+  force_password_reset Boolean @default(false)
 
   // Relations
   connections_user1       connections[]               @relation("User1Connections")
@@ -37,6 +41,8 @@ model users {
   presence                user_presence?
   typing_sent             typing_status[]             @relation("TypingFromUser")
   typing_received         typing_status[]             @relation("TypingToUser")
+  media_sent              media_assets[]              @relation("MediaSender")
+  media_received          media_assets[]              @relation("MediaReceiver")
 }
 
 // Device tokens for FCM push notifications
@@ -89,16 +95,40 @@ model messages {
   receiver_id          Int
   content              String
   sent_at              DateTime  @default(now())
+  delivered_at         DateTime?
   is_read              Boolean   @default(false)
   read_at              DateTime?
+  edited_at            DateTime?
+  edit_count           Int       @default(0)
   deleted_for_sender   Boolean   @default(false)
   deleted_for_receiver Boolean   @default(false)
 
   sender         users           @relation("SentMessages",   fields: [sender_id],   references: [user_id], onDelete: Cascade)
   receiver       users           @relation("ReceivedMessages", fields: [receiver_id], references: [user_id], onDelete: Cascade)
   message_timers message_timers?
+  media          media_assets?
 
   @@index([sender_id, receiver_id])
+}
+
+// Stored media payloads linked to messages
+model media_assets {
+  media_id       Int      @id @default(autoincrement())
+  message_id     Int      @unique
+  sender_id      Int
+  receiver_id    Int
+  mime_type      String   @default("image/jpeg")
+  byte_size      Int
+  preview_bytes  Bytes?
+  content_bytes  Bytes
+  created_at     DateTime @default(now())
+
+  message  messages @relation(fields: [message_id], references: [message_id], onDelete: Cascade)
+  sender   users    @relation("MediaSender", fields: [sender_id], references: [user_id], onDelete: Cascade)
+  receiver users    @relation("MediaReceiver", fields: [receiver_id], references: [user_id], onDelete: Cascade)
+
+  @@index([sender_id, receiver_id])
+  @@index([created_at])
 }
 
 // Message timers

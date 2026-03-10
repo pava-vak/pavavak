@@ -1,9 +1,12 @@
 ﻿package com.pavavak.app.nativechat
 
 import android.content.Context
+import android.util.Base64
 import android.webkit.CookieManager
 import android.util.Log
 import com.pavavak.app.BuildConfig
+import io.socket.client.IO
+import io.socket.client.Socket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -20,6 +23,7 @@ import java.util.Locale
 data class LoginResult(
     val success: Boolean,
     val isAdmin: Boolean = false,
+    val requiresPasswordReset: Boolean = false,
     val error: String = ""
 )
 
@@ -36,6 +40,11 @@ data class ProfileResult(
     val error: String = ""
 )
 
+data class BasicResult(
+    val success: Boolean,
+    val error: String = ""
+)
+
 object NativeApi {
 
     private val baseUrl: String = BuildConfig.BASE_URL.trimEnd('/')
@@ -43,6 +52,16 @@ object NativeApi {
     private val IST_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
     private val IST_TIME_FORMAT: DateTimeFormatter =
         DateTimeFormatter.ofPattern("h:mm a", Locale("en", "IN"))
+    @Volatile private var realtimeSocket: Socket? = null
+    @Volatile private var realtimeChatUserId: Int? = null
+    @Volatile private var cachedSession: SessionInfo? = null
+
+    interface RealtimeListener {
+        fun onNewMessage(message: ChatMessage)
+        fun onMessageDelivered(messageId: String)
+        fun onMessageRead(messageId: String)
+        fun onMessageEdited(messageId: String, content: String, isEdited: Boolean, remoteMediaId: String?)
+    }
 
     fun baseUrl(): String = baseUrl
 
@@ -75,17 +94,50 @@ object NativeApi {
 
             val ok = json.optBoolean("success", false)
             val isAdmin = json.optJSONObject("user")?.optBoolean("isAdmin", false) ?: false
+            val requiresPasswordReset = json.optBoolean("requiresPasswordReset", false) ||
+                (json.optJSONObject("user")?.optBoolean("forcePasswordReset", false) ?: false)
             val error = json.optString("error", if (ok) "" else "Login failed")
-            LoginResult(ok, isAdmin, error)
+            if (ok) {
+                cachedSession = SessionInfo(
+                    authenticated = true,
+                    userId = json.optJSONObject("user")?.optInt("userId", 0) ?: 0,
+                    isAdmin = isAdmin,
+                    forcePasswordReset = requiresPasswordReset
+                )
+            } else {
+                cachedSession = null
+            }
+            LoginResult(ok, isAdmin, requiresPasswordReset, error)
         } catch (e: Exception) {
-            LoginResult(false, false, e.message ?: "Login failed")
+            LoginResult(false, false, false, e.message ?: "Login failed")
         } finally {
             conn?.disconnect()
         }
     }
 
     suspend fun logout() = withContext(Dispatchers.IO) {
+        cachedSession = null
         request("POST", "/api/auth/logout")
+    }
+
+    suspend fun requestPasswordReset(usernameOrEmail: String): BasicResult = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("usernameOrEmail", usernameOrEmail.trim())
+        val json = request("POST", "/api/auth/request-password-reset", body)
+            ?: return@withContext BasicResult(false, "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext BasicResult(false, json.optString("error", "Failed"))
+        }
+        BasicResult(true)
+    }
+
+    suspend fun completePasswordReset(newPassword: String): BasicResult = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("newPassword", newPassword)
+        val json = request("POST", "/api/auth/complete-password-reset", body)
+            ?: return@withContext BasicResult(false, "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext BasicResult(false, json.optString("error", "Failed"))
+        }
+        BasicResult(true)
     }
 
     suspend fun registerFcmToken(
@@ -119,7 +171,10 @@ object NativeApi {
         val user = json.optJSONObject("user")
         val userId = user?.optInt("userId", 0) ?: 0
         val isAdmin = user?.optBoolean("isAdmin", false) ?: false
-        SessionInfo(authenticated, userId, isAdmin)
+        val forcePasswordReset = user?.optBoolean("forcePasswordReset", false) ?: false
+        return@withContext SessionInfo(authenticated, userId, isAdmin, forcePasswordReset).also {
+            cachedSession = if (it.authenticated) it else null
+        }
     }
 
     suspend fun getProfile(): ProfileResult = withContext(Dispatchers.IO) {
@@ -140,6 +195,28 @@ object NativeApi {
         val body = JSONObject().put("fullName", fullName.trim())
         val json = request("PUT", "/api/users/profile", body) ?: return@withContext false
         json.optBoolean("success", false)
+    }
+
+    suspend fun changePassword(currentPassword: String, newPassword: String): BasicResult = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("currentPassword", currentPassword)
+            .put("newPassword", newPassword)
+        val json = request("POST", "/api/users/change-password", body)
+            ?: return@withContext BasicResult(false, "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext BasicResult(false, json.optString("error", "Failed to change password"))
+        }
+        BasicResult(true)
+    }
+
+    suspend fun deleteMyAccount(password: String): BasicResult = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("password", password)
+        val json = request("DELETE", "/api/users/delete-account", body)
+            ?: return@withContext BasicResult(false, "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext BasicResult(false, json.optString("error", "Failed to delete account"))
+        }
+        BasicResult(true)
     }
 
     suspend fun getConversations(): List<ChatSummary> = withContext(Dispatchers.IO) {
@@ -164,7 +241,7 @@ object NativeApi {
                     val emoji = wire.reactionEmoji?.ifBlank { "removed reaction" } ?: "reacted"
                     "Reaction: $emoji"
                 }
-                wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() -> "Photo"
+                wire?.type == "chat" && (!wire.imageBase64.isNullOrBlank() || !wire.mediaId.isNullOrBlank()) -> "Photo"
                 wire?.type == "chat" && !wire.text.isNullOrBlank() -> wire.text
                 else -> inlineMessagePreview(contentRaw)
             }
@@ -210,7 +287,7 @@ object NativeApi {
     }
 
     suspend fun getMessages(otherUserId: Int): List<ChatMessage> = withContext(Dispatchers.IO) {
-        val session = getSession()
+        val session = cachedSession ?: getSession()
         if (!session.authenticated) {
             Log.w(TAG, "getMessages aborted: session not authenticated")
             return@withContext emptyList()
@@ -251,6 +328,8 @@ object NativeApi {
             val displayText = when {
                 wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
                     INLINE_IMAGE_PREFIX + wire.imageBase64
+                wire?.type == "chat" && !wire.mediaId.isNullOrBlank() ->
+                    REMOTE_IMAGE_PREFIX + wire.mediaId
                 wire?.type == "chat" && !wire.text.isNullOrBlank() ->
                     wire.text
                 else -> contentRaw
@@ -266,6 +345,9 @@ object NativeApi {
                     isRead = m.optBoolean("isRead", m.optBoolean("is_read", false)),
                     replyPreview = wire?.replyPreview?.let(::inlineMessagePreview)
                         ?: extractReplyPreview(m)?.let(::inlineMessagePreview)
+                    ,
+                    isEdited = m.optBoolean("isEdited", false),
+                    remoteMediaId = wire?.mediaId
                 )
             )
             byId[messageId.toString()] = list.last()
@@ -326,6 +408,8 @@ object NativeApi {
                 when {
                     wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
                         INLINE_IMAGE_PREFIX + wire.imageBase64
+                    wire?.type == "chat" && !wire.mediaId.isNullOrBlank() ->
+                        REMOTE_IMAGE_PREFIX + wire.mediaId
                     wire?.type == "chat" && !wire.text.isNullOrBlank() ->
                         wire.text
                     else -> serverContent
@@ -340,6 +424,11 @@ object NativeApi {
                 wire?.replyPreview?.let(::inlineMessagePreview)
                     ?: extractReplyPreview(msg)?.let(::inlineMessagePreview)
                     ?: replyPreview?.let(::inlineMessagePreview)
+            },
+            isEdited = msg.optBoolean("isEdited", false),
+            remoteMediaId = run {
+                val serverContent = msg.optString("content", "")
+                decodeWirePayload(serverContent)?.mediaId
             }
             )
         )
@@ -359,6 +448,34 @@ object NativeApi {
         json.optBoolean("success", false)
     }
 
+    suspend fun editMessage(messageId: String, content: String): SendResult = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("content", content.trim())
+        val json = request("PUT", "/api/messages/$messageId/edit", body)
+            ?: return@withContext SendResult(false, error = "Network error")
+        if (!json.optBoolean("success", false)) {
+            return@withContext SendResult(false, error = json.optString("error", "Edit failed"))
+        }
+        val msg = json.optJSONObject("message") ?: return@withContext SendResult(false, error = "Invalid response")
+        SendResult(
+            success = true,
+            message = ChatMessage(
+                id = msg.optInt("messageId", 0).toString(),
+                isMine = true,
+                text = msg.optString("content", ""),
+                time = "",
+                isEdited = msg.optBoolean("isEdited", true)
+            )
+        )
+    }
+
+    suspend fun fetchMediaBase64(mediaId: String, variant: String = "preview"): String? = withContext(Dispatchers.IO) {
+        val id = mediaId.trim()
+        if (id.isBlank()) return@withContext null
+        val normalized = if (variant.equals("full", ignoreCase = true)) "full" else "preview"
+        val bytes = requestBytes("/api/messages/media/$id?variant=$normalized") ?: return@withContext null
+        Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
+
     suspend fun clearChat(otherUserId: Int): Boolean = withContext(Dispatchers.IO) {
         val json = request("DELETE", "/api/messages/conversation/$otherUserId/clear") ?: return@withContext false
         json.optBoolean("success", false)
@@ -366,6 +483,11 @@ object NativeApi {
 
     suspend fun markMessageRead(messageId: String): Boolean = withContext(Dispatchers.IO) {
         val json = request("PUT", "/api/messages/$messageId/read") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun markConversationRead(otherUserId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("PUT", "/api/messages/$otherUserId/read-all") ?: return@withContext false
         json.optBoolean("success", false)
     }
 
@@ -380,6 +502,42 @@ object NativeApi {
             totalMessages = s.optInt("totalMessages", 0),
             pendingResets = s.optInt("pendingResets", 0)
         )
+    }
+
+    suspend fun getPendingPasswordResets(): List<PasswordResetRequest> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/password-resets/pending") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("requests") ?: JSONArray()
+        val out = mutableListOf<PasswordResetRequest>()
+        for (i in 0 until arr.length()) {
+            val r = arr.optJSONObject(i) ?: continue
+            out.add(
+                PasswordResetRequest(
+                    requestId = r.optInt("request_id", 0),
+                    userId = r.optInt("userId", 0),
+                    username = r.optString("username", ""),
+                    email = r.optString("email", ""),
+                    status = r.optString("status", "pending"),
+                    createdAt = r.optString("created_at", "")
+                )
+            )
+        }
+        out
+    }
+
+    suspend fun generateResetOtp(requestId: Int): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/admin/password-resets/$requestId/generate-otp")
+            ?: return@withContext null
+        if (!json.optBoolean("success", false)) return@withContext null
+        val otp = json.optString("otp", "")
+        val expiresAt = json.optString("expiresAt", "")
+        if (otp.isBlank()) return@withContext null
+        otp to expiresAt
+    }
+
+    suspend fun dismissResetRequest(requestId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/admin/password-resets/$requestId/dismiss") ?: return@withContext false
+        json.optBoolean("success", false)
     }
 
     suspend fun getAdminRecentMessages(limit: Int = 50): List<AdminMessage> = withContext(Dispatchers.IO) {
@@ -404,8 +562,13 @@ object NativeApi {
         out
     }
 
-    suspend fun adminDeleteMessage(messageId: Int): Boolean = withContext(Dispatchers.IO) {
-        val json = request("DELETE", "/api/admin/messages/$messageId") ?: return@withContext false
+    suspend fun adminDeleteMessage(messageId: Int, scope: String = "all"): Boolean = withContext(Dispatchers.IO) {
+        val normalized = when (scope.lowercase(Locale.ROOT)) {
+            "sender" -> "sender"
+            "receiver" -> "receiver"
+            else -> "all"
+        }
+        val json = request("DELETE", "/api/messages/admin/$messageId?scope=$normalized") ?: return@withContext false
         json.optBoolean("success", false)
     }
 
@@ -452,6 +615,120 @@ object NativeApi {
     suspend fun adminClearConversation(user1Id: Int, user2Id: Int): Boolean = withContext(Dispatchers.IO) {
         val json = request("DELETE", "/api/messages/admin/conversation/$user1Id/$user2Id") ?: return@withContext false
         json.optBoolean("success", false)
+    }
+
+    suspend fun connectRealtime(chatUserId: Int, listener: RealtimeListener): Boolean = withContext(Dispatchers.IO) {
+        try {
+            disconnectRealtime()
+            val session = getSession()
+            if (!session.authenticated || session.userId <= 0) return@withContext false
+            val cookie = CookieManager.getInstance().getCookie(baseUrl).orEmpty()
+            if (cookie.isBlank()) return@withContext false
+
+            val opts = IO.Options.builder()
+                .setForceNew(true)
+                .setReconnection(true)
+                .setPath("/socket.io/")
+                .setTransports(arrayOf("websocket", "polling"))
+                .setExtraHeaders(mapOf("Cookie" to listOf(cookie)))
+                .build()
+
+            val socket = IO.socket(baseUrl, opts)
+
+            socket.on(Socket.EVENT_CONNECT) {
+                Log.d(TAG, "realtime connected chatUserId=$chatUserId")
+            }
+            socket.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                Log.w(TAG, "realtime connect error=${args.firstOrNull()}")
+            }
+
+            socket.on("new_message") { args ->
+                val obj = args.firstOrNull() as? JSONObject ?: return@on
+                val senderId = obj.optInt("senderId", 0)
+                val receiverId = obj.optInt("receiverId", 0)
+                val isRelevant =
+                    (senderId == chatUserId && receiverId == session.userId) ||
+                    (senderId == session.userId && receiverId == chatUserId)
+                if (!isRelevant) return@on
+
+                val contentRaw = obj.optString("content", "")
+                val wire = decodeWirePayload(contentRaw)
+                val displayText = when {
+                    wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
+                        INLINE_IMAGE_PREFIX + wire.imageBase64
+                    wire?.type == "chat" && !wire.mediaId.isNullOrBlank() ->
+                        REMOTE_IMAGE_PREFIX + wire.mediaId
+                    wire?.type == "chat" && !wire.text.isNullOrBlank() ->
+                        wire.text
+                    else -> contentRaw
+                }
+                listener.onNewMessage(
+                    ChatMessage(
+                        id = obj.optInt("messageId", 0).toString(),
+                        isMine = senderId == session.userId,
+                        text = displayText,
+                        time = formatTime(obj.optString("sentAt", "")),
+                        isDelivered = obj.optBoolean("isDelivered", false),
+                        isRead = obj.optBoolean("isRead", false),
+                        replyPreview = wire?.replyPreview?.let(::inlineMessagePreview),
+                        isEdited = obj.optBoolean("isEdited", false),
+                        remoteMediaId = wire?.mediaId
+                    )
+                )
+            }
+
+            socket.on("message_delivered") { args ->
+                val obj = args.firstOrNull() as? JSONObject ?: return@on
+                listener.onMessageDelivered(obj.opt("messageId")?.toString() ?: return@on)
+            }
+
+            socket.on("message_read") { args ->
+                val obj = args.firstOrNull() as? JSONObject ?: return@on
+                listener.onMessageRead(obj.opt("messageId")?.toString() ?: return@on)
+            }
+
+            socket.on("message_edited") { args ->
+                val obj = args.firstOrNull() as? JSONObject ?: return@on
+                val messageId = obj.opt("messageId")?.toString() ?: return@on
+                val contentRaw = obj.optString("content", "")
+                val wire = decodeWirePayload(contentRaw)
+                val displayText = when {
+                    wire?.type == "chat" && !wire.imageBase64.isNullOrBlank() ->
+                        INLINE_IMAGE_PREFIX + wire.imageBase64
+                    wire?.type == "chat" && !wire.mediaId.isNullOrBlank() ->
+                        REMOTE_IMAGE_PREFIX + wire.mediaId
+                    wire?.type == "chat" && !wire.text.isNullOrBlank() ->
+                        wire.text
+                    else -> contentRaw
+                }
+                listener.onMessageEdited(
+                    messageId = messageId,
+                    content = displayText,
+                    isEdited = obj.optBoolean("isEdited", true),
+                    remoteMediaId = wire?.mediaId
+                )
+            }
+
+            realtimeSocket = socket
+            realtimeChatUserId = chatUserId
+            socket.connect()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "connectRealtime failed: ${e.message}")
+            false
+        }
+    }
+
+    fun disconnectRealtime() {
+        try {
+            realtimeSocket?.off()
+            realtimeSocket?.disconnect()
+            realtimeSocket?.close()
+        } catch (_: Exception) {
+        } finally {
+            realtimeSocket = null
+            realtimeChatUserId = null
+        }
     }
 
     private fun formatTime(iso: String): String {
@@ -527,6 +804,28 @@ object NativeApi {
             JSONObject(text)
         } catch (e: Exception) {
             Log.e(TAG, "request failed method=$method path=$path message=${e.message}")
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun requestBytes(path: String): ByteArray? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                val cookie = CookieManager.getInstance().getCookie(baseUrl)
+                if (!cookie.isNullOrBlank()) {
+                    setRequestProperty("Cookie", cookie)
+                }
+            }
+            if (conn.responseCode !in 200..299) return null
+            conn.inputStream.use { it.readBytes() }
+        } catch (e: Exception) {
+            Log.e(TAG, "requestBytes failed path=$path message=${e.message}")
             null
         } finally {
             conn?.disconnect()

@@ -20,7 +20,8 @@ import kotlin.math.roundToInt
 class MessageAdapter(
     private val items: MutableList<ChatMessage>,
     private val onLongPress: (ChatMessage) -> Unit,
-    private val onRetryTap: (ChatMessage) -> Unit
+    private val onRetryTap: (ChatMessage) -> Unit,
+    private val onRemoteMediaTap: (ChatMessage, Boolean) -> Unit
 ) : RecyclerView.Adapter<MessageAdapter.MessageVH>() {
     private enum class ImageLoadState { NONE, THUMBNAIL, FULL }
 
@@ -65,16 +66,32 @@ class MessageAdapter(
         holder.reply.text = item.replyPreview ?: ""
 
         val imageBase64 = extractInlineImageBase64(item.text)
-        if (imageBase64 != null) {
+        val remoteMediaId = item.remoteMediaId ?: extractRemoteMediaId(item.text)
+        if (imageBase64 != null || remoteMediaId != null) {
             val state = imageStates[item.id] ?: ImageLoadState.NONE
+            val remoteBase64 = when (state) {
+                ImageLoadState.NONE -> null
+                ImageLoadState.THUMBNAIL -> item.remotePreviewBase64
+                ImageLoadState.FULL -> item.remoteFullBase64 ?: item.remotePreviewBase64
+            }
+            val effectiveBase64 = imageBase64 ?: remoteBase64
             if (state == ImageLoadState.NONE) {
                 holder.image.visibility = View.GONE
                 holder.image.setImageDrawable(null)
                 holder.body.visibility = View.VISIBLE
                 holder.body.text = "Image received - tap to preview"
+            } else if (effectiveBase64.isNullOrBlank()) {
+                holder.image.visibility = View.GONE
+                holder.image.setImageDrawable(null)
+                holder.body.visibility = View.VISIBLE
+                holder.body.text = if (state == ImageLoadState.THUMBNAIL) {
+                    "Loading preview..."
+                } else {
+                    "Downloading full image..."
+                }
             } else {
                 val decoded = decodeInlineImage(
-                    base64 = imageBase64,
+                    base64 = effectiveBase64,
                     maxDimension = if (state == ImageLoadState.THUMBNAIL) 280 else 1600
                 )
                 if (decoded != null) {
@@ -100,7 +117,7 @@ class MessageAdapter(
             holder.body.text = item.text
         }
         if (item.isMine) {
-            holder.meta.text = item.time
+            holder.meta.text = if (item.isEdited && item.time.isNotBlank()) "${item.time} · edited" else item.time
             if (item.time == "failed") {
                 holder.meta.setTextColor(
                     ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
@@ -145,7 +162,7 @@ class MessageAdapter(
                 }
             }
         } else {
-            holder.meta.text = item.time
+            holder.meta.text = if (item.isEdited && item.time.isNotBlank()) "${item.time} · edited" else item.time
             holder.meta.setTextColor(ContextCompat.getColor(holder.itemView.context, R.color.text_secondary))
             holder.ticks.visibility = View.GONE
         }
@@ -170,12 +187,20 @@ class MessageAdapter(
                 toggleSelection(item.id)
                 return@setOnClickListener
             }
-            if (imageBase64 != null) {
+            if (imageBase64 != null || remoteMediaId != null) {
                 val current = imageStates[item.id] ?: ImageLoadState.NONE
-                imageStates[item.id] = when (current) {
+                val next = when (current) {
                     ImageLoadState.NONE -> ImageLoadState.THUMBNAIL
                     ImageLoadState.THUMBNAIL -> ImageLoadState.FULL
                     ImageLoadState.FULL -> ImageLoadState.FULL
+                }
+                imageStates[item.id] = next
+                if (remoteMediaId != null) {
+                    val needFull = next == ImageLoadState.FULL && item.remoteFullBase64.isNullOrBlank()
+                    val needPreview = next == ImageLoadState.THUMBNAIL && item.remotePreviewBase64.isNullOrBlank()
+                    if (needFull || needPreview) {
+                        onRemoteMediaTap(item, needFull)
+                    }
                 }
                 notifyItemChanged(position)
                 return@setOnClickListener

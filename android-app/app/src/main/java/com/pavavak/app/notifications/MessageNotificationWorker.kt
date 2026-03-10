@@ -22,12 +22,13 @@ class MessageNotificationWorker(
             }
 
             val unread = NativeApi.getTotalUnreadCount()
+            val hint = if (unread > 0) NativeApi.getUnreadNotificationHint() else null
             val last = getLastUnread()
 
             if (unread <= 0) {
                 NotificationHelper.showHiddenMessageNotification(applicationContext, 0)
             } else if (unread != last) {
-                NotificationHelper.showHiddenMessageNotification(applicationContext, unread)
+                NotificationHelper.showHiddenMessageNotification(applicationContext, unread, hint)
             }
 
             saveLastUnread(unread)
@@ -51,4 +52,3 @@ class MessageNotificationWorker(
             .apply()
     }
 }
-

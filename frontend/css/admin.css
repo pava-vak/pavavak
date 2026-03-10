@@ -134,6 +134,11 @@ body {
     color: #333;
 }
 
+.section-header > div {
+    display: flex;
+    gap: 8px;
+}
+
 /* Buttons */
 .btn {
     padding: 10px 20px;
@@ -170,6 +175,15 @@ body {
 
 .btn-danger:hover {
     background: #dc2626;
+}
+
+.btn-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #d97706;
 }
 
 .btn-approve {

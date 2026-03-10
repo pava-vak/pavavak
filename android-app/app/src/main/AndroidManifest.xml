@@ -15,7 +15,7 @@
         android:roundIcon="@drawable/icon_512"
         android:supportsRtl="true"
         android:theme="@style/Theme.PaVaVak"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".nativechat.ChatActivity"
@@ -30,6 +30,10 @@
 
         <activity
             android:name=".LoginActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ForcePasswordResetActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 

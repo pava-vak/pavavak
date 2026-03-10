@@ -524,10 +524,19 @@ function formatTime(ts) {
     if (ms < 60000)   return 'Just now';
     if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
     if (d.toDateString() === now.toDateString())
-        return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Kolkata'
+        });
     const y = new Date(now); y.setDate(y.getDate() - 1);
     if (d.toDateString() === y.toDateString()) return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-IN', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Kolkata'
+    });
 }
 
 function escapeHtml(text) {

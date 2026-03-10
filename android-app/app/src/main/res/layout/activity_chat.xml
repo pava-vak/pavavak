@@ -17,6 +17,35 @@
         app:menu="@menu/menu_chat" />
 
     <LinearLayout
+        android:id="@+id/chatStatusRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/presenceDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@drawable/bg_presence_dot" />
+
+        <TextView
+            android:id="@+id/syncStatusChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@color/selection_bg"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="All synced"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/selectionBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

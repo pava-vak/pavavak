@@ -37,6 +37,7 @@ function setupEventListeners() {
 
     // User tab
     document.getElementById('createUserBtn').addEventListener('click', openCreateUserModal);
+    document.getElementById('resetAllPasswordsBtn').addEventListener('click', resetAllUserPasswords);
     document.getElementById('userSearchInput').addEventListener('input', filterUsers);
 
     // Create user modal
@@ -97,10 +98,11 @@ function handleDynamicClicks(e) {
         case 'delete-user': deleteUser(userId, username); break;
         case 'toggle-admin': toggleAdmin(userId, username); break;
         case 'edit-user': openEditUserModal(userId); break;
+        case 'reset-user-password': resetUserPassword(userId, username); break;
         case 'delete-connection': deleteConnection(connectionId); break;
         case 'delete-invite': deleteInvite(code); break;
         case 'delete-message': deleteMessage(messageId); break;
-        case 'generate-reset-link': generateResetLink(requestId, username); break;
+        case 'generate-reset-link': generateResetOtp(requestId, username); break;
         case 'dismiss-reset': dismissResetRequest(requestId); break;
         case 'copy-invite': copyToClipboard(code, 'Invite code copied!'); break;
     }
@@ -206,7 +208,7 @@ if (activity.success) {
                 container.innerHTML = resets.requests.slice(0, 5).map(r => `
                     <div class="dash-item">
                         <span>${r.username}</span>
-                        <button class="btn btn-sm btn-primary" data-action="generate-reset-link" data-request-id="${r.request_id}" data-username="${r.username}">Generate Link</button>
+                        <button class="btn btn-sm btn-primary" data-action="generate-reset-link" data-request-id="${r.request_id}" data-username="${r.username}">Generate OTP</button>
                     </div>
                 `).join('');
             }
@@ -285,6 +287,7 @@ function renderUsersTable(users) {
             <td>${formatDate(u.created_at)}</td>
             <td class="actions">
                 <button class="btn btn-sm btn-primary" data-action="edit-user" data-user-id="${u.user_id}">Edit</button>
+                <button class="btn btn-sm btn-warning" data-action="reset-user-password" data-user-id="${u.user_id}" data-username="${u.username}">Reset Password</button>
                 <button class="btn btn-sm btn-warning" data-action="toggle-admin" data-user-id="${u.user_id}" data-username="${u.username}">${u.is_admin ? 'Remove Admin' : 'Make Admin'}</button>
                 ${u.user_id !== currentUser.userId ? `<button class="btn btn-sm btn-danger" data-action="delete-user" data-user-id="${u.user_id}" data-username="${u.username}">Delete</button>` : ''}
             </td>
@@ -474,7 +477,7 @@ async function loadPasswordResets() {
                             <td>${formatDate(r.created_at)}</td>
                             <td><span class="badge badge-warning">${r.status}</span></td>
                             <td class="actions">
-                                <button class="btn btn-sm btn-primary" data-action="generate-reset-link" data-request-id="${r.request_id}" data-username="${r.username}">Generate Link</button>
+                                <button class="btn btn-sm btn-primary" data-action="generate-reset-link" data-request-id="${r.request_id}" data-username="${r.username}">Generate OTP</button>
                                 <button class="btn btn-sm btn-danger" data-action="dismiss-reset" data-request-id="${r.request_id}">Dismiss</button>
                             </td>
                         </tr>
@@ -485,16 +488,16 @@ async function loadPasswordResets() {
     } catch (error) { console.error('Load resets error:', error); }
 }
 
-async function generateResetLink(requestId, username) {
+async function generateResetOtp(requestId, username) {
     try {
-        const res = await fetch(`${API_URL}/admin/password-resets/${requestId}/generate-link`, {
+        const res = await fetch(`${API_URL}/admin/password-resets/${requestId}/generate-otp`, {
             method: 'POST', credentials: 'include'
         });
         const data = await res.json();
 
         if (data.success) {
             document.getElementById('resetLinkUsername').textContent = username;
-            document.getElementById('resetLinkUrl').textContent = data.resetLink;
+            document.getElementById('resetLinkUrl').textContent = `${data.otp} (expires: ${formatDate(data.expiresAt)})`;
             openModal('resetLinkModal');
             loadPasswordResets();
         } else {
@@ -505,7 +508,7 @@ async function generateResetLink(requestId, username) {
 
 function copyResetLink() {
     const link = document.getElementById('resetLinkUrl').textContent;
-    copyToClipboard(link, 'Reset link copied!');
+    copyToClipboard(link, 'OTP copied!');
 }
 
 async function dismissResetRequest(requestId) {
@@ -808,10 +811,87 @@ function closeModal(id) {
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleString('en-IN', {
         month: 'short', day: 'numeric', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+        hour: '2-digit', minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
     });
+}
+
+async function resetUserPassword(userId, username) {
+    if (!confirm(`Reset password for "${username}"?`)) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/users/${userId}/reset-password`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById('createdUsername').textContent = data.reset.username;
+            document.getElementById('createdEmail').textContent = data.reset.email || 'N/A';
+            document.getElementById('tempPassword').textContent = data.reset.temporaryPassword;
+            openModal('passwordModal');
+            showToast(`Password reset for ${data.reset.username}`, 'success');
+        } else {
+            showToast(data.error || 'Failed to reset password', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to reset password', 'error');
+    }
+}
+
+async function resetAllUserPasswords() {
+    if (!confirm('Reset passwords for ALL users? This will force everyone to use new temporary passwords.')) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/users/reset-passwords-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ includeAdmins: true, includeCurrentAdmin: true })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+            showToast(data.error || 'Bulk reset failed', 'error');
+            return;
+        }
+
+        downloadResetCredentials(data.resetCredentials || []);
+        showToast(`Reset complete: ${data.summary.totalReset} users`, 'success');
+    } catch (error) {
+        showToast('Bulk reset failed', 'error');
+    }
+}
+
+function downloadResetCredentials(resetCredentials) {
+    if (!resetCredentials.length) return;
+
+    const generatedAt = new Date().toISOString();
+    const lines = [
+        `PaVa-Vak Password Reset Export`,
+        `Generated At (UTC): ${generatedAt}`,
+        '',
+        'user_id,username,email,is_admin,temporary_password'
+    ];
+
+    for (const row of resetCredentials) {
+        const email = (row.email || '').replace(/,/g, ' ');
+        lines.push(`${row.userId},${row.username},${email},${row.isAdmin ? 'yes' : 'no'},${row.temporaryPassword}`);
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `pavavak-password-resets-${Date.now()}.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
 }
 
 function escapeHtml(text) {

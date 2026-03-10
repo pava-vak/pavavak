@@ -25,8 +25,10 @@ class SettingsActivity : AppCompatActivity() {
 
         val light = findViewById<MaterialButton>(R.id.themeLightBtn)
         val dark = findViewById<MaterialButton>(R.id.themeDarkBtn)
+        val colorComboBtn = findViewById<MaterialButton>(R.id.colorComboBtn)
         val currentIsDark = ThemeManager.isDark(this)
         updateButtons(light, dark, currentIsDark)
+        updateColorComboButton(colorComboBtn)
 
         light.setOnClickListener {
             ThemeManager.set(this, ThemeManager.MODE_LIGHT)
@@ -38,6 +40,7 @@ class SettingsActivity : AppCompatActivity() {
             updateButtons(light, dark, true)
             recreate()
         }
+        colorComboBtn.setOnClickListener { showColorComboPicker(colorComboBtn) }
 
         val appLockSwitch = findViewById<SwitchMaterial>(R.id.appLockSwitch)
         val biometricResumeSwitch = findViewById<SwitchMaterial>(R.id.biometricResumeSwitch)
@@ -46,6 +49,8 @@ class SettingsActivity : AppCompatActivity() {
         val setupPinBtn = findViewById<MaterialButton>(R.id.setupPinBtn)
         val managePinBtn = findViewById<MaterialButton>(R.id.managePinBtn)
         val editMyNameBtn = findViewById<MaterialButton>(R.id.editMyNameBtn)
+        val changePasswordBtn = findViewById<MaterialButton>(R.id.changePasswordBtn)
+        val deleteAccountBtn = findViewById<MaterialButton>(R.id.deleteAccountBtn)
 
         appLockSwitch.isChecked = AppSecurityPrefs.isAppLockEnabled(this)
         biometricResumeSwitch.isChecked = AppSecurityPrefs.allowBiometricOnResume(this)
@@ -70,6 +75,8 @@ class SettingsActivity : AppCompatActivity() {
         setupPinBtn.setOnClickListener { launchPinSetup() }
         managePinBtn.setOnClickListener { launchPinManager() }
         editMyNameBtn.setOnClickListener { showEditMyNameDialog() }
+        changePasswordBtn.setOnClickListener { showChangePasswordDialog() }
+        deleteAccountBtn.setOnClickListener { showDeleteAccountDialog() }
     }
 
     override fun onResume() {
@@ -109,6 +116,36 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateButtons(light: MaterialButton, dark: MaterialButton, isDark: Boolean) {
         light.text = if (isDark) "Light Mode" else "Light Mode (Current)"
         dark.text = if (isDark) "Dark Mode (Current)" else "Dark Mode"
+    }
+
+    private fun updateColorComboButton(button: MaterialButton) {
+        val label = when (ThemeManager.getColorCombo(this)) {
+            ThemeManager.COMBO_FOREST -> "Forest"
+            ThemeManager.COMBO_SUNSET -> "Sunset"
+            else -> "Ocean"
+        }
+        button.text = "Color Combo: $label"
+    }
+
+    private fun showColorComboPicker(button: MaterialButton) {
+        val labels = arrayOf("Ocean", "Forest", "Sunset")
+        val values = arrayOf(
+            ThemeManager.COMBO_OCEAN,
+            ThemeManager.COMBO_FOREST,
+            ThemeManager.COMBO_SUNSET
+        )
+        val current = ThemeManager.getColorCombo(this)
+        val checked = values.indexOf(current).coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle("Choose color combo")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                ThemeManager.setColorCombo(this, values[which])
+                updateColorComboButton(button)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showTimeoutPicker(timeoutBtn: MaterialButton) {
@@ -218,5 +255,78 @@ class SettingsActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+    }
+
+    private fun showChangePasswordDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 12, 48, 0)
+        }
+        val currentInput = EditText(this).apply {
+            hint = "Current password"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val newInput = EditText(this).apply {
+            hint = "New password (min 8 chars)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        container.addView(currentInput)
+        container.addView(newInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("Change Password")
+            .setView(container)
+            .setPositiveButton("Save") { _, _ ->
+                val current = currentInput.text?.toString().orEmpty()
+                val next = newInput.text?.toString().orEmpty()
+                if (current.isBlank() || next.length < 8) {
+                    Toast.makeText(this, "Enter valid passwords", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val result = NativeApi.changePassword(current, next)
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        if (result.success) "Password changed" else result.error,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showDeleteAccountDialog() {
+        val input = EditText(this).apply {
+            hint = "Enter password to confirm"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Delete My Account")
+            .setMessage("This action cannot be undone.")
+            .setView(input)
+            .setPositiveButton("Delete") { _, _ ->
+                val password = input.text?.toString().orEmpty()
+                if (password.isBlank()) {
+                    Toast.makeText(this, "Password required", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val result = NativeApi.deleteMyAccount(password)
+                    if (!result.success) {
+                        Toast.makeText(this@SettingsActivity, result.error, Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    Toast.makeText(this@SettingsActivity, "Account deleted", Toast.LENGTH_SHORT).show()
+                    NativeApi.logout()
+                    startActivity(
+                        Intent(this@SettingsActivity, LoginActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    )
+                    finish()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

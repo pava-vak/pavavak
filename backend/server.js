@@ -18,7 +18,9 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const pgSession = require('connect-pg-simple')(session);
-const prisma     = require('./lib/prisma'); // shared singleton — one pool for entire app
+const prisma     = require('./lib/prisma'); // shared singleton - one pool for entire app
+const { ensurePresenceTypingSchema } = require('./lib/presenceTypingBootstrap');
+const { ensurePasswordResetSchema } = require('./lib/passwordResetBootstrap');
 
 // =====================
 // INIT
@@ -360,16 +362,23 @@ io.on('connection', (socket) => {
       const undeliveredMessages = await prisma.messages.findMany({
         where: {
           receiver_id: userId,
-          is_read: false
+          delivered_at: null
         },
         select: {
           message_id: true,
           sender_id: true
         }
       });
+      if (undeliveredMessages.length > 0) {
+        await prisma.messages.updateMany({
+          where: { message_id: { in: undeliveredMessages.map((m) => m.message_id) } },
+          data: { delivered_at: new Date() }
+        });
+      }
       undeliveredMessages.forEach(msg => {
         io.to(`user_${msg.sender_id}`).emit('message_delivered', {
-          messageId: msg.message_id
+          messageId: msg.message_id,
+          deliveredAt: new Date()
         });
       });
     } catch (e) {
@@ -506,20 +515,41 @@ setInterval(async () => {
 // =====================
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`
+async function startServer() {
+  try {
+    await ensurePresenceTypingSchema();
+    console.log('[BOOT] Presence/typing schema ensured');
+  } catch (e) {
+    console.error('[BOOT] Presence/typing schema bootstrap failed:', e.message);
+    // Keep existing app startup unaffected even if bootstrap fails.
+  }
+  try {
+    await ensurePasswordResetSchema();
+    console.log('[BOOT] Password reset schema ensured');
+  } catch (e) {
+    console.error('[BOOT] Password reset schema bootstrap failed:', e.message);
+    // Keep existing app startup unaffected even if bootstrap fails.
+  }
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`
 ╔═══════════════════════════════════════════╗
 ║                                           ║
 ║     PaVa-Vak Server v2.0 Started 🚀       ║
 ║                                           ║
 ║  Port        : ${PORT}                       
-║  Environment : ${process.env.NODE_ENV || 'development'}              
-║  Push Notif  : ${webpush ? 'Enabled ✅' : 'Disabled ⚠️ '}           
+║  Environment : ${process.env.NODE_ENV || 'development'}             
+║  Push Notif  : ${webpush ? 'Enabled ✅' : 'Disabled ⚠️ '}          
 ║  DB Keepalive: Enabled ✅                  
 ║  Memory Guard: Enabled ✅                  
 ║                                           ║
 ╚═══════════════════════════════════════════╝
 `);
-});
+  });
+}
+
+startServer();
 
 module.exports = { app, server, io, prisma };
+
+

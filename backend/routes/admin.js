@@ -5,6 +5,15 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { isAuthenticated, isAdmin } = require('../middleware/auth');
 
+function generateTemporaryPassword() {
+  return Math.random().toString(36).substring(2, 6).toUpperCase() +
+         Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+function generateOneTimePassword() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 // Dashboard stats
 router.get('/dashboard/stats', isAuthenticated, isAdmin, async (req, res) => {
   try {
@@ -200,6 +209,119 @@ router.put('/users/:userId/admin', isAuthenticated, isAdmin, async (req, res) =>
   }
 });
 
+// Reset one user's password (admin action)
+router.post('/users/:userId/reset-password', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(userId)) {
+      return res.status(400).json({ success: false, error: 'Invalid user id' });
+    }
+
+    const user = await prisma.users.findUnique({
+      where: { user_id: userId },
+      select: { user_id: true, username: true, email: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
+    await prisma.users.update({
+      where: { user_id: userId },
+      data: {
+        password_hash: passwordHash,
+        force_password_reset: true,
+        reset_otp_hash: null,
+        reset_otp_expiry: null,
+        reset_otp_used_at: null,
+        reset_token: null,
+        reset_token_expiry: null
+      }
+    });
+
+    res.json({
+      success: true,
+      reset: {
+        userId: user.user_id,
+        username: user.username,
+        email: user.email,
+        temporaryPassword
+      }
+    });
+  } catch (error) {
+    console.error('Reset single user password error:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset password' });
+  }
+});
+
+// Reset all users' passwords (admin action)
+router.post('/users/reset-passwords-all', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const includeAdmins = req.body?.includeAdmins !== false;
+    const includeCurrentAdmin = req.body?.includeCurrentAdmin !== false;
+
+    const users = await prisma.users.findMany({
+      select: { user_id: true, username: true, email: true, is_admin: true },
+      orderBy: { user_id: 'asc' }
+    });
+
+    const targetUsers = users.filter(u => {
+      if (!includeAdmins && u.is_admin) return false;
+      if (!includeCurrentAdmin && u.user_id === req.user.user_id) return false;
+      return true;
+    });
+
+    if (targetUsers.length === 0) {
+      return res.status(400).json({ success: false, error: 'No users selected for reset' });
+    }
+
+    const resetCredentials = [];
+    await prisma.$transaction(async (tx) => {
+      for (const user of targetUsers) {
+        const temporaryPassword = generateTemporaryPassword();
+        const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
+        await tx.users.update({
+          where: { user_id: user.user_id },
+          data: {
+            password_hash: passwordHash,
+            force_password_reset: true,
+            reset_otp_hash: null,
+            reset_otp_expiry: null,
+            reset_otp_used_at: null,
+            reset_token: null,
+            reset_token_expiry: null
+          }
+        });
+
+        resetCredentials.push({
+          userId: user.user_id,
+          username: user.username,
+          email: user.email,
+          isAdmin: user.is_admin,
+          temporaryPassword
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      summary: {
+        totalReset: resetCredentials.length,
+        includeAdmins,
+        includeCurrentAdmin
+      },
+      resetCredentials
+    });
+  } catch (error) {
+    console.error('Bulk reset passwords error:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset passwords' });
+  }
+});
+
 // ==================== PASSWORD RESETS ====================
 
 // Get pending reset requests
@@ -217,6 +339,7 @@ router.get('/password-resets/pending', isAuthenticated, isAdmin, async (req, res
       success: true,
       requests: requests.map(r => ({
         request_id: r.request_id,
+        userId: r.user_id,
         username: r.user.username,
         email: r.user.email,
         status: r.status,
@@ -226,6 +349,65 @@ router.get('/password-resets/pending', isAuthenticated, isAdmin, async (req, res
   } catch (error) {
     console.error('Get resets error:', error);
     res.json({ success: true, requests: [] });
+  }
+});
+
+// Generate one-time password from reset request
+router.post('/password-resets/:requestId/generate-otp', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const requestId = parseInt(req.params.requestId, 10);
+    if (!Number.isInteger(requestId)) {
+      return res.status(400).json({ success: false, error: 'Invalid request id' });
+    }
+
+    const resetRequest = await prisma.password_reset_requests.findUnique({
+      where: { request_id: requestId },
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            username: true
+          }
+        }
+      }
+    });
+    if (!resetRequest) {
+      return res.status(404).json({ success: false, error: 'Request not found' });
+    }
+
+    const otp = generateOneTimePassword();
+    const otpHash = await bcrypt.hash(otp, 12);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await prisma.users.update({
+      where: { user_id: resetRequest.user.user_id },
+      data: {
+        reset_otp_hash: otpHash,
+        reset_otp_expiry: expiresAt,
+        reset_otp_used_at: null,
+        force_password_reset: true,
+        reset_token: null,
+        reset_token_expiry: null
+      }
+    });
+
+    await prisma.password_reset_requests.update({
+      where: { request_id: requestId },
+      data: {
+        status: 'otp_generated',
+        resolved_at: new Date()
+      }
+    });
+
+    return res.json({
+      success: true,
+      otp,
+      expiresAt,
+      username: resetRequest.user.username
+    });
+  } catch (error) {
+    console.error('Generate reset OTP error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to generate OTP' });
   }
 });
 

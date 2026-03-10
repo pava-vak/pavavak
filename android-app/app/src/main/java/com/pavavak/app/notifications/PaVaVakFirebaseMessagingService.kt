@@ -26,9 +26,31 @@ class PaVaVakFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        // Keep notification content hidden regardless of payload.
+        // Show immediately from payload so background alerts never depend on API/session.
         val unreadCount = message.data["unreadCount"]?.toIntOrNull() ?: 1
-        NotificationHelper.ensureChannels(this)
-        NotificationHelper.showHiddenMessageNotification(this, unreadCount)
+        val hintFromPayload = when (message.data["type"]) {
+            "new_message" -> "You have new messages"
+            else -> null
+        }
+        NotificationHelper.ensureChannels(this@PaVaVakFirebaseMessagingService)
+        NotificationHelper.showHiddenMessageNotification(
+            this@PaVaVakFirebaseMessagingService,
+            unreadCount,
+            hintFromPayload
+        )
+
+        // Best-effort refinement from backend (do not block initial alert).
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                val hint = if (unreadCount > 0) NativeApi.getUnreadNotificationHint() else null
+                if (!hint.isNullOrBlank()) {
+                    NotificationHelper.showHiddenMessageNotification(
+                        this@PaVaVakFirebaseMessagingService,
+                        unreadCount,
+                        hint
+                    )
+                }
+            }
+        }
     }
 }

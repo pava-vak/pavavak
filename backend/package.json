@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "reset:password": "node scripts/resetPassword.js"
   },
   "keywords": [
     "chat",

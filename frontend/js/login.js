@@ -186,15 +186,28 @@ function initPasswordToggle() {
 function initForgotPassword() {
     const link = document.getElementById('forgotPasswordLink');
 
-    link.addEventListener('click', function(e) {
+    link.addEventListener('click', async function(e) {
         e.preventDefault();
-        alert(
-            'Password Reset Instructions:\n\n' +
-            '1. Contact your system administrator\n' +
-            '2. Or run: node scripts/resetPassword.js\n' +
-            '   in the backend folder\n\n' +
-            'You will need command line access to reset your password.'
-        );
+        const username = document.getElementById('username').value.trim();
+        const value = prompt('Enter your username or email to request password reset:', username);
+        if (!value || !value.trim()) return;
+
+        try {
+            const response = await fetch(`${API_URL}/auth/request-password-reset`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ usernameOrEmail: value.trim() })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showMessage('Reset request sent. Admin will issue one-time password.', 'success');
+            } else {
+                showMessage(data.error || 'Failed to submit reset request', 'error');
+            }
+        } catch (error) {
+            showMessage('Failed to submit reset request', 'error');
+        }
     });
 }
 

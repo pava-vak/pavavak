@@ -71,7 +71,9 @@ class ChatActivity : AppCompatActivity() {
     private var replyTarget: ChatMessage? = null
     private var refreshJob: Job? = null
     private var typingGuardJob: Job? = null
+    private var realtimeConnected: Boolean = false
     private var lastServerSignature: String = ""
+    private var initialResumeRefreshPending = false
     private val pendingMessages = mutableListOf<ChatMessage>()
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -133,6 +135,9 @@ class ChatActivity : AppCompatActivity() {
             },
             onRetryTap = { message ->
                 retryQueuedMessage(message)
+            },
+            onRemoteMediaTap = { message, full ->
+                loadRemoteMedia(message, full)
             }
         )
         recycler.adapter = adapter
@@ -177,6 +182,7 @@ class ChatActivity : AppCompatActivity() {
         }
 
             loadMessages()
+            initialResumeRefreshPending = true
         } catch (e: Exception) {
             logChatError("onCreate", e)
             Toast.makeText(this, "Chat opened with errors. Pull to refresh.", Toast.LENGTH_LONG).show()
@@ -200,9 +206,32 @@ class ChatActivity : AppCompatActivity() {
             return
         }
         startAutoRefresh()
+        lifecycleScope.launch {
+            realtimeConnected = NativeApi.connectRealtime(otherUserId, object : NativeApi.RealtimeListener {
+                override fun onNewMessage(message: ChatMessage) {
+                    runOnUiThread { applyRealtimeNewMessage(message) }
+                }
+
+                override fun onMessageDelivered(messageId: String) {
+                    runOnUiThread { applyRealtimeDelivered(messageId) }
+                }
+
+                override fun onMessageRead(messageId: String) {
+                    runOnUiThread { applyRealtimeRead(messageId) }
+                }
+
+                override fun onMessageEdited(messageId: String, content: String, isEdited: Boolean, remoteMediaId: String?) {
+                    runOnUiThread { applyRealtimeEdited(messageId, content, isEdited, remoteMediaId) }
+                }
+            })
+        }
         enqueuePendingIfAny()
         updateToolbarPresence(messages)
-        lifecycleScope.launch { refreshMessagesSilently() }
+        if (initialResumeRefreshPending) {
+            initialResumeRefreshPending = false
+        } else {
+            lifecycleScope.launch { refreshMessagesSilently() }
+        }
     }
 
     override fun onPause() {
@@ -211,6 +240,8 @@ class ChatActivity : AppCompatActivity() {
         refreshJob = null
         typingGuardJob?.cancel()
         typingGuardJob = null
+        NativeApi.disconnectRealtime()
+        realtimeConnected = false
     }
 
     private fun loadMessages() {
@@ -250,7 +281,7 @@ class ChatActivity : AppCompatActivity() {
             Log.d(tag, "loadMessages serverCount=${list.size} pendingCount=${pendingMessages.size}")
             val signature = buildServerSignature(list)
             val changed = signature != lastServerSignature
-            if ((list.isNotEmpty() || cached.isEmpty()) && changed) {
+            if (changed) {
                 applyServerMessages(list)
                 markIncomingAsRead(list)
                 syncListVisibility()
@@ -284,11 +315,13 @@ class ChatActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             try {
+            val wasAtBottom = isAtBottom()
+            val prevLastId = messages.lastOrNull()?.id
             val list = NativeApi.getMessages(otherUserId)
             Log.d(tag, "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size}")
             val signature = buildServerSignature(list)
             val changed = signature != lastServerSignature
-            if (list.isNotEmpty() && changed) {
+            if (changed) {
                 applyServerMessages(list)
                 markIncomingAsRead(list)
                 updateToolbarPresence(list)
@@ -296,14 +329,16 @@ class ChatActivity : AppCompatActivity() {
                     localStore.cacheMessages(otherUserId, messages)
                 }
                 lastServerSignature = signature
+                val newLastId = messages.lastOrNull()?.id
+                val hasNewTail = newLastId != null && newLastId != prevLastId
+                if (messages.isNotEmpty() && (wasAtBottom || hasNewTail)) {
+                    recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
+                }
             } else {
                 updateToolbarPresence(messages)
             }
             swipeRefresh.isRefreshing = false
             syncListVisibility()
-            if (messages.isNotEmpty()) {
-                recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
-            }
             updateToolbarPresence(messages)
             } catch (e: Exception) {
                 logChatError("refreshMessagesSilently", e)
@@ -317,7 +352,8 @@ class ChatActivity : AppCompatActivity() {
         if (refreshJob != null) return
         refreshJob = lifecycleScope.launch {
             while (true) {
-                delay(3500)
+                // Realtime socket is primary. Polling is only fallback.
+                delay(if (realtimeConnected) 60_000 else 12_000)
                 refreshMessagesSilently()
             }
         }
@@ -335,10 +371,10 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun markIncomingAsRead(list: List<ChatMessage>) {
-        val unreadIncoming = list.filter { !it.isMine && !it.isRead }.map { it.id }
-        if (unreadIncoming.isEmpty()) return
+        val hasUnreadIncoming = list.any { !it.isMine && !it.isRead }
+        if (!hasUnreadIncoming) return
         lifecycleScope.launch(Dispatchers.IO) {
-            unreadIncoming.forEach { NativeApi.markMessageRead(it) }
+            NativeApi.markConversationRead(otherUserId)
         }
     }
 
@@ -362,6 +398,9 @@ class ChatActivity : AppCompatActivity() {
         if (message.isMine && !isServerMessageId(message.id) && (message.time == "failed" || message.time == "queued")) {
             actions.add("Retry now" to { retryQueuedMessage(message) })
         }
+        if (message.isMine && isServerMessageId(message.id) && message.remoteMediaId.isNullOrBlank()) {
+            actions.add("Edit message" to { showEditMessageDialog(message) })
+        }
         if (isServerMessageId(message.id)) {
             actions.add("Delete for everyone" to { deleteSingleLive(message, "all") })
             actions.add("Delete for me" to { deleteSingleLive(message, "me") })
@@ -377,6 +416,34 @@ class ChatActivity : AppCompatActivity() {
             .setTitle("Message actions")
             .setItems(options) { _, which ->
                 actions[which].second.invoke()
+            }
+            .show()
+    }
+
+    private fun showEditMessageDialog(message: ChatMessage) {
+        val current = if (isRemoteImagePayload(message.text)) "" else message.text
+        val input = EditText(this).apply {
+            setText(current)
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Edit message")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val updated = input.text?.toString()?.trim().orEmpty()
+                if (updated.isBlank()) {
+                    Toast.makeText(this, "Message cannot be empty", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val result = NativeApi.editMessage(message.id, updated)
+                    if (!result.success) {
+                        Toast.makeText(this@ChatActivity, result.error.ifBlank { "Edit failed" }, Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    refreshMessagesSilently()
+                }
             }
             .show()
     }
@@ -416,6 +483,25 @@ class ChatActivity : AppCompatActivity() {
             }
             MessageReactionPrefs.clearReactionsForMessages(this@ChatActivity, otherUserId, listOf(message.id))
             loadMessages()
+        }
+    }
+
+    private fun loadRemoteMedia(message: ChatMessage, full: Boolean) {
+        val mediaId = message.remoteMediaId ?: return
+        lifecycleScope.launch {
+            val base64 = withContext(Dispatchers.IO) {
+                NativeApi.fetchMediaBase64(mediaId, if (full) "full" else "preview")
+            }
+            if (base64.isNullOrBlank()) {
+                Toast.makeText(this@ChatActivity, "Failed to load image", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (full) {
+                message.remoteFullBase64 = base64
+            } else {
+                message.remotePreviewBase64 = base64
+            }
+            adapter.refresh()
         }
     }
 
@@ -629,10 +715,13 @@ class ChatActivity : AppCompatActivity() {
                 .append(':')
                 .append(if (m.isRead) '1' else '0')
                 .append(if (m.isDelivered) '1' else '0')
+                .append(if (m.isEdited) '1' else '0')
                 .append(':')
                 .append((m.reaction ?: "").hashCode())
                 .append(':')
                 .append(m.time.hashCode())
+                .append(':')
+                .append(m.text.hashCode())
                 .append('|')
         }
         return sb.toString()
@@ -678,6 +767,65 @@ class ChatActivity : AppCompatActivity() {
         adapter.refresh()
     }
 
+    private fun applyRealtimeNewMessage(message: ChatMessage) {
+        val idx = messages.indexOfFirst { it.id == message.id }
+        if (idx >= 0) {
+            messages[idx] = message
+        } else {
+            messages.add(message)
+        }
+        val signature = buildServerSignature(messages.filter { isServerMessageId(it.id) })
+        lastServerSignature = signature
+        adapter.refresh()
+        syncListVisibility()
+        if (isAtBottom() || !message.isMine) {
+            recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
+        }
+        if (!message.isMine && isServerMessageId(message.id)) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                NativeApi.markMessageRead(message.id)
+            }
+        }
+        updateToolbarPresence(messages)
+        lifecycleScope.launch(Dispatchers.IO) { localStore.cacheMessages(otherUserId, messages) }
+    }
+
+    private fun applyRealtimeDelivered(messageId: String) {
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val msg = messages[idx]
+        if (!msg.isMine) return
+        msg.isDelivered = true
+        adapter.refresh()
+        updateToolbarPresence(messages)
+    }
+
+    private fun applyRealtimeRead(messageId: String) {
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val msg = messages[idx]
+        if (!msg.isMine) return
+        msg.isDelivered = true
+        msg.isRead = true
+        adapter.refresh()
+        updateToolbarPresence(messages)
+    }
+
+    private fun applyRealtimeEdited(messageId: String, content: String, isEdited: Boolean, remoteMediaId: String?) {
+        val idx = messages.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val msg = messages[idx]
+        msg.text = content
+        msg.isEdited = isEdited
+        msg.remoteMediaId = remoteMediaId
+        if (remoteMediaId != null) {
+            msg.remotePreviewBase64 = null
+            msg.remoteFullBase64 = null
+        }
+        adapter.refresh()
+        lifecycleScope.launch(Dispatchers.IO) { localStore.cacheMessages(otherUserId, messages) }
+    }
+
     private fun syncListVisibility() {
         if (messages.isEmpty()) {
             emptyText.visibility = View.VISIBLE
@@ -689,6 +837,14 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun isServerMessageId(id: String): Boolean = id.all { it.isDigit() }
+
+    private fun isAtBottom(): Boolean {
+        val lm = recycler.layoutManager as? LinearLayoutManager ?: return true
+        val total = adapter.itemCount
+        if (total <= 1) return true
+        val lastVisible = lm.findLastCompletelyVisibleItemPosition()
+        return lastVisible >= total - 2
+    }
 
     private fun hideKeyboard(target: View) {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager ?: return

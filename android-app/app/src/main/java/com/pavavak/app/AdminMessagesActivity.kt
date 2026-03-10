@@ -62,12 +62,21 @@ class AdminMessagesActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(msg: AdminMessage) {
+        val scopes = arrayOf(
+            "Delete for all",
+            "Delete sender side",
+            "Delete receiver side"
+        )
         AlertDialog.Builder(this)
-            .setTitle("Delete message")
-            .setMessage("Delete message #${msg.messageId} for everyone?")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle("Delete message #${msg.messageId}")
+            .setItems(scopes) { _, which ->
+                val scope = when (which) {
+                    1 -> "sender"
+                    2 -> "receiver"
+                    else -> "all"
+                }
                 lifecycleScope.launch {
-                    val ok = NativeApi.adminDeleteMessage(msg.messageId)
+                    val ok = NativeApi.adminDeleteMessage(msg.messageId, scope)
                     if (!ok) {
                         Toast.makeText(this@AdminMessagesActivity, "Delete failed", Toast.LENGTH_SHORT).show()
                     }

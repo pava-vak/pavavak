@@ -10,23 +10,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.pavavak.app.data.local.LocalDatabaseProvider
-import com.pavavak.app.nativechat.NativeApi
 import com.pavavak.app.notifications.NotificationHelper
 import com.pavavak.app.sync.PendingSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
     private val tag = "PaVaVakLock"
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var startedCount = 0
     private var lockLaunchInProgress = false
-    private var quickPollJob: Job? = null
     private var appWasInBackground = false
 
     override fun onCreate() {
@@ -42,7 +37,7 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
             LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_START -> {
-                        stopQuickPoll()
+                        // Foreground: push channel already active via FCM.
                     }
                     Lifecycle.Event.ON_STOP -> {
                         // Reliable app-level background marker (covers minimize/app switch).
@@ -50,7 +45,7 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
                         AppSecurityPrefs.setLockRequiredOnResume(this, true)
                         appWasInBackground = true
                         Log.i(tag, "Process ON_STOP -> lock_required_on_resume=true")
-                        startQuickPoll()
+                        // Background: avoid tight polling loops to reduce battery usage.
                     }
                     else -> Unit
                 }
@@ -88,10 +83,10 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
     override fun onActivityStopped(activity: Activity) {
         startedCount = (startedCount - 1).coerceAtLeast(0)
         if (startedCount == 0) {
-            AppSecurityPrefs.setLastBackgroundAt(this, System.currentTimeMillis())
-            AppSecurityPrefs.setLockRequiredOnResume(this, true)
-            appWasInBackground = true
-            Log.i(tag, "Activity count zero -> lock_required_on_resume=true")
+            // Do not mark background here; during Activity-to-Activity navigation
+            // startedCount can briefly become 0 and would cause false lock triggers.
+            // ProcessLifecycle ON_STOP is the reliable background signal.
+            Log.i(tag, "Activity count zero (waiting for process ON_STOP if app actually backgrounded)")
             lockLaunchInProgress = false
         }
     }
@@ -157,36 +152,12 @@ class PaVaVakApp : Application(), Application.ActivityLifecycleCallbacks {
         return elapsed >= timeoutMs
     }
 
-    private fun startQuickPoll() {
-        if (quickPollJob != null) return
-        quickPollJob = appScope.launch(Dispatchers.IO) {
-            while (true) {
-                try {
-                    NotificationHelper.ensureChannels(this@PaVaVakApp)
-                    val session = NativeApi.getSession()
-                    if (session.authenticated) {
-                        val unread = NativeApi.getTotalUnreadCount()
-                        val hint = if (unread > 0) NativeApi.getUnreadNotificationHint() else null
-                        NotificationHelper.showHiddenMessageNotification(this@PaVaVakApp, unread, hint)
-                    }
-                } catch (_: Exception) {
-                }
-                delay(20_000)
-            }
-        }
-    }
-
     private fun applyRecentsPrivacy(activity: Activity) {
         if (AppSecurityPrefs.hideInRecentsEnabled(activity)) {
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
-    }
-
-    private fun stopQuickPoll() {
-        quickPollJob?.cancel()
-        quickPollJob = null
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {

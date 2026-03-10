@@ -24,6 +24,9 @@ object NotificationBootstrap {
     private const val PERIODIC_WORK_NAME = "secure_message_notif_periodic"
     private const val ONE_SHOT_WORK_NAME = "secure_message_notif_oneshot"
     private const val REQ_POST_NOTIF = 1201
+    private const val PREFS = "notif_bootstrap"
+    private const val KEY_LAST_ONESHOT_MS = "last_oneshot_ms"
+    private const val ONE_SHOT_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000L
 
     private const val TAG = "PaVaVakFCM"
 
@@ -74,7 +77,7 @@ object NotificationBootstrap {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val periodic = PeriodicWorkRequestBuilder<MessageNotificationWorker>(15, TimeUnit.MINUTES)
+        val periodic = PeriodicWorkRequestBuilder<MessageNotificationWorker>(30, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build()
 
@@ -84,14 +87,20 @@ object NotificationBootstrap {
             periodic
         )
 
-        val oneShot = OneTimeWorkRequestBuilder<MessageNotificationWorker>()
-            .setConstraints(constraints)
-            .build()
+        val prefs = activity.getSharedPreferences(PREFS, AppCompatActivity.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = prefs.getLong(KEY_LAST_ONESHOT_MS, 0L)
+        if (now - last >= ONE_SHOT_MIN_INTERVAL_MS) {
+            val oneShot = OneTimeWorkRequestBuilder<MessageNotificationWorker>()
+                .setConstraints(constraints)
+                .build()
 
-        WorkManager.getInstance(activity).enqueueUniqueWork(
-            ONE_SHOT_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
-            oneShot
-        )
+            WorkManager.getInstance(activity).enqueueUniqueWork(
+                ONE_SHOT_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                oneShot
+            )
+            prefs.edit().putLong(KEY_LAST_ONESHOT_MS, now).apply()
+        }
     }
 }

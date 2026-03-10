@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.kapt")
     id("com.google.gms.google-services")
 }
 
@@ -34,7 +35,7 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "BASE_URL", "\"http://144.24.129.194:3000\"")
+        buildConfigField("String", "BASE_URL", "\"https://pavavak-750508954318.asia-south1.run.app\"")
     }
 
     flavorDimensions += "app"
@@ -111,6 +112,12 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("io.socket:socket.io-client:2.1.0") {
+        exclude(group = "org.json", module = "json")
+    }
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

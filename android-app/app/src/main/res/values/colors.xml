@@ -17,4 +17,7 @@
     <color name="status_delivered_bg">#BDD1F7</color>
     <color name="status_read_bg">#A6D8FF</color>
     <color name="status_failed_bg">#F8C7C7</color>
+    <color name="presence_online">#2EBD59</color>
+    <color name="presence_syncing">#D99A2B</color>
+    <color name="presence_offline">#9EA8BB</color>
 </resources>

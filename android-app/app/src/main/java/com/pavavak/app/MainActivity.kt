@@ -28,6 +28,16 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
+            if (session.forcePasswordReset) {
+                AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
+                startActivity(
+                    Intent(this@MainActivity, ForcePasswordResetActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                )
+                finish()
+                return@launch
+            }
+
             if (session.isAdmin) {
                 AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
                 startActivity(

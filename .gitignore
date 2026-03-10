@@ -51,3 +51,7 @@ server-code/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+backend/.env 
+supabase details.txt 
+*.pub 
+backend/ssh* 

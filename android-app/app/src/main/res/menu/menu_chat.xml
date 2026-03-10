@@ -6,6 +6,16 @@
         android:showAsAction="never" />
 
     <item
+        android:id="@+id/action_refresh_status"
+        android:title="Refresh status"
+        android:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_presence_info"
+        android:title="Presence info"
+        android:showAsAction="never" />
+
+    <item
         android:id="@+id/action_clear_chat"
         android:title="Clear chat"
         android:showAsAction="never" />

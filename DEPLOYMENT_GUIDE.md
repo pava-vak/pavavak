@@ -697,3 +697,10 @@ If you encounter issues:
 **Your Control: Complete**
 
 Enjoy your secure, private chat system! 🎊
+# Current deployment note
+
+This file is legacy Oracle-first guidance kept only for reference.
+
+Use the current Cloud Run guide instead:
+
+- [GOOGLE_CLOUD_RUN_RUNBOOK.md](/j:/PaVa-Vak/deployment/GOOGLE_CLOUD_RUN_RUNBOOK.md)

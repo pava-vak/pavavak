@@ -20,13 +20,27 @@ data class ChatMessage(
     var isDelivered: Boolean = false,
     var isRead: Boolean = false,
     var replyPreview: String? = null,
-    var reaction: String? = null
+    var reaction: String? = null,
+    var isEdited: Boolean = false,
+    var remoteMediaId: String? = null,
+    var remotePreviewBase64: String? = null,
+    var remoteFullBase64: String? = null
 )
 
 data class SessionInfo(
     val authenticated: Boolean,
     val userId: Int,
-    val isAdmin: Boolean
+    val isAdmin: Boolean,
+    val forcePasswordReset: Boolean = false
+)
+
+data class PasswordResetRequest(
+    val requestId: Int,
+    val userId: Int,
+    val username: String,
+    val email: String,
+    val status: String,
+    val createdAt: String
 )
 
 data class AdminStats(

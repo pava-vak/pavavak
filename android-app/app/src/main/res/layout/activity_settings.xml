@@ -51,6 +51,15 @@
         android:layout_marginHorizontal="16dp"
         android:text="Dark Mode" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/colorComboBtn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Color Combo: Ocean" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -69,6 +78,35 @@
         android:layout_marginTop="8dp"
         android:layout_marginHorizontal="16dp"
         android:text="Edit My Name (Both Ends)" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:paddingHorizontal="16dp"
+        android:text="Account Security"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/changePasswordBtn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Change Password" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/deleteAccountBtn"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="16dp"
+        android:text="Delete My Account"
+        android:textColor="#B00020" />
 
     <TextView
         android:layout_width="match_parent"

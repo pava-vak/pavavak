@@ -150,6 +150,41 @@ async function cleanup() {
     console.log(`   ✓ Removed ${orphanedCount} orphaned timer(s)`);
     totalCleaned += orphanedCount;
 
+    // 8. Media assets maintenance (safe: orphan cleanup + storage report)
+    console.log('\n?? Checking media assets...');
+    try {
+      const mediaStats = await prisma.media_assets.aggregate({
+        _count: { media_id: true },
+        _sum: { byte_size: true }
+      });
+      const mediaCount = mediaStats._count.media_id || 0;
+      const mediaBytes = mediaStats._sum.byte_size || 0;
+      console.log(`   ? Media assets: ${mediaCount} file(s), ${(mediaBytes / (1024 * 1024)).toFixed(2)} MB`);
+
+      // Orphan cleanup (should usually be zero because FK is CASCADE)
+      const orphanedMedia = await prisma.$queryRaw`
+        SELECT m.media_id
+        FROM media_assets m
+        LEFT JOIN messages msg ON msg.message_id = m.message_id
+        WHERE msg.message_id IS NULL
+      `;
+      const orphanIds = Array.isArray(orphanedMedia)
+        ? orphanedMedia.map(r => Number(r.media_id)).filter(Boolean)
+        : [];
+
+      if (orphanIds.length > 0) {
+        const removed = await prisma.media_assets.deleteMany({
+          where: { media_id: { in: orphanIds } }
+        });
+        console.log(`   ? Removed ${removed.count} orphaned media asset(s)`);
+        totalCleaned += removed.count;
+      } else {
+        console.log('   ? No orphaned media assets');
+      }
+    } catch (mediaError) {
+      console.log(`   ??  Media maintenance skipped: ${mediaError.message}`);
+    }
+
     // Summary
     console.log('\n========================================');
     console.log(`✅ Cleanup completed successfully!`);
@@ -198,3 +233,4 @@ process.on('SIGINT', async () => {
 
 // Run cleanup
 cleanup();
+
