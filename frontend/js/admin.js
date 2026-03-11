@@ -1,6 +1,8 @@
 const API_URL = '/api';
 let currentUser = null;
 let allUsers = [];
+let broadcastRecipients = [];
+const selectedBroadcastUsers = new Set();
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -68,6 +70,16 @@ function setupEventListeners() {
 
     // Messages tab
     document.getElementById('refreshMessagesBtn').addEventListener('click', loadMessages);
+    document.getElementById('refreshBroadcastRecipientsBtn').addEventListener('click', loadBroadcastRecipients);
+    document.getElementById('sendBroadcastBtn').addEventListener('click', sendBroadcastNotification);
+    document.getElementById('broadcastSelectAllBtn').addEventListener('click', selectAllBroadcastRecipients);
+    document.getElementById('broadcastClearSelectionBtn').addEventListener('click', clearBroadcastSelection);
+    document.getElementById('broadcastUserSearch').addEventListener('input', renderBroadcastRecipients);
+    document.getElementById('broadcastRecipientsList').addEventListener('change', handleBroadcastRecipientToggle);
+    document.querySelectorAll('input[name="broadcastMode"]').forEach(el => {
+        el.addEventListener('change', updateBroadcastModeUi);
+    });
+    document.getElementById('broadcastIncludeSelf').addEventListener('change', updateBroadcastSummary);
 
     // Invites tab
     document.getElementById('generateInviteBtn').addEventListener('click', generateInviteCode);
@@ -120,6 +132,7 @@ function switchTab(tabName) {
         case 'dashboard': loadDashboard(); break;
         case 'users': loadUsers(); break;
         case 'resets': loadPasswordResets(); break;
+        case 'broadcast': loadBroadcastRecipients(); break;
         case 'connections': loadConnections(); break;
         case 'messages': loadMessages(); break;
         case 'invites': loadInvites(); break;
@@ -523,6 +536,198 @@ async function dismissResetRequest(requestId) {
             loadPasswordResets();
         }
     } catch (error) { showToast('Failed', 'error'); }
+}
+
+// ==================== CONNECTIONS ====================
+
+// ==================== BROADCAST ====================
+
+async function loadBroadcastRecipients() {
+    try {
+        const res = await fetch(`${API_URL}/admin/notifications/recipients`, { credentials: 'include' });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(data.error || 'Failed to load recipients', 'error');
+            return;
+        }
+        broadcastRecipients = data.recipients || [];
+        for (const userId of [...selectedBroadcastUsers]) {
+            if (!broadcastRecipients.some(u => u.userId === userId)) {
+                selectedBroadcastUsers.delete(userId);
+            }
+        }
+        renderBroadcastRecipients();
+        updateBroadcastModeUi();
+        updateBroadcastSummary(data.summary || null);
+    } catch (error) {
+        showToast('Failed to load recipients', 'error');
+    }
+}
+
+function renderBroadcastRecipients() {
+    const container = document.getElementById('broadcastRecipientsList');
+    const query = (document.getElementById('broadcastUserSearch').value || '').trim().toLowerCase();
+    const includeSelf = document.getElementById('broadcastIncludeSelf').checked;
+
+    const filtered = broadcastRecipients.filter(user => {
+        if (!includeSelf && currentUser && user.userId === currentUser.userId) return false;
+        if (!query) return true;
+        return (
+            user.username.toLowerCase().includes(query) ||
+            (user.fullName && user.fullName.toLowerCase().includes(query))
+        );
+    });
+
+    if (!filtered.length) {
+        container.innerHTML = '<p class="empty-state">No matching recipients</p>';
+        return;
+    }
+
+    container.innerHTML = filtered.map(user => {
+        const checked = selectedBroadcastUsers.has(user.userId) ? 'checked' : '';
+        const name = escapeHtml(user.fullName || user.username);
+        const username = escapeHtml(user.username);
+        return `
+            <label class="broadcast-recipient-item">
+                <input type="checkbox" data-action="toggle-broadcast-user" data-user-id="${user.userId}" ${checked}>
+                <div class="broadcast-recipient-meta">
+                    <strong>${name}</strong>
+                    <span>@${username}</span>
+                </div>
+                <div class="broadcast-recipient-badges">
+                    <span class="badge ${user.isAdmin ? 'badge-admin' : 'badge-approved'}">${user.isAdmin ? 'Admin' : 'User'}</span>
+                    <span class="badge ${user.activeTokenCount > 0 ? 'badge-approved' : 'badge-pending'}">${user.activeTokenCount} active token${user.activeTokenCount === 1 ? '' : 's'}</span>
+                </div>
+            </label>
+        `;
+    }).join('');
+}
+
+function selectedBroadcastMode() {
+    return document.querySelector('input[name="broadcastMode"]:checked')?.value || 'all';
+}
+
+function updateBroadcastModeUi() {
+    const selectedOnly = selectedBroadcastMode() === 'selected';
+    document.getElementById('broadcastRecipientsList').classList.toggle('broadcast-recipient-list-disabled', !selectedOnly);
+    document.getElementById('broadcastSelectAllBtn').disabled = !selectedOnly;
+    document.getElementById('broadcastClearSelectionBtn').disabled = !selectedOnly;
+    document.getElementById('broadcastUserSearch').disabled = !selectedOnly;
+    updateBroadcastSummary();
+}
+
+function updateBroadcastSummary(serverSummary = null) {
+    const summary = document.getElementById('broadcastAudienceSummary');
+    const includeSelf = document.getElementById('broadcastIncludeSelf').checked;
+    const visibleRecipients = broadcastRecipients.filter(user => includeSelf || !currentUser || user.userId !== currentUser.userId);
+    const activeTokenUsers = visibleRecipients.filter(user => user.activeTokenCount > 0).length;
+
+    if (selectedBroadcastMode() === 'selected') {
+        const selected = visibleRecipients.filter(user => selectedBroadcastUsers.has(user.userId));
+        summary.textContent = `Selected ${selected.length} user(s). ${selected.filter(user => user.activeTokenCount > 0).length} currently have active device tokens.`;
+        return;
+    }
+
+    const totalUsers = serverSummary?.totalUsers ?? visibleRecipients.length;
+    const tokenUsers = serverSummary?.activeTokenUsers ?? activeTokenUsers;
+    const effectiveUsers = includeSelf ? totalUsers : visibleRecipients.length;
+    const effectiveTokenUsers = includeSelf ? tokenUsers : activeTokenUsers;
+    summary.textContent = `Broadcast will target ${effectiveUsers} approved user(s). ${effectiveTokenUsers} currently have active device tokens.`;
+}
+
+function toggleBroadcastUser(userId) {
+    if (!userId) return;
+    if (selectedBroadcastUsers.has(userId)) {
+        selectedBroadcastUsers.delete(userId);
+    } else {
+        selectedBroadcastUsers.add(userId);
+    }
+    renderBroadcastRecipients();
+    updateBroadcastSummary();
+}
+
+function handleBroadcastRecipientToggle(event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    if (input.type !== 'checkbox') return;
+    const userId = parseInt(input.dataset.userId || '', 10);
+    if (!Number.isInteger(userId) || userId <= 0) return;
+    if (input.checked) {
+        selectedBroadcastUsers.add(userId);
+    } else {
+        selectedBroadcastUsers.delete(userId);
+    }
+    updateBroadcastSummary();
+}
+
+function selectAllBroadcastRecipients() {
+    if (selectedBroadcastMode() !== 'selected') return;
+    const includeSelf = document.getElementById('broadcastIncludeSelf').checked;
+    const query = (document.getElementById('broadcastUserSearch').value || '').trim().toLowerCase();
+    broadcastRecipients.forEach(user => {
+        if (!includeSelf && currentUser && user.userId === currentUser.userId) return;
+        if (query) {
+            const matches = user.username.toLowerCase().includes(query) ||
+                (user.fullName && user.fullName.toLowerCase().includes(query));
+            if (!matches) return;
+        }
+        selectedBroadcastUsers.add(user.userId);
+    });
+    renderBroadcastRecipients();
+    updateBroadcastSummary();
+}
+
+function clearBroadcastSelection() {
+    selectedBroadcastUsers.clear();
+    renderBroadcastRecipients();
+    updateBroadcastSummary();
+}
+
+async function sendBroadcastNotification() {
+    const title = (document.getElementById('broadcastTitle').value || '').trim();
+    const body = (document.getElementById('broadcastBody').value || '').trim();
+    const mode = selectedBroadcastMode();
+    const includeSelf = document.getElementById('broadcastIncludeSelf').checked;
+    const userIds = mode === 'selected' ? [...selectedBroadcastUsers] : [];
+
+    if (!title) {
+        showToast('Notification title is required', 'error');
+        return;
+    }
+    if (!body) {
+        showToast('Notification message is required', 'error');
+        return;
+    }
+    if (mode === 'selected' && userIds.length === 0) {
+        showToast('Select at least one user', 'error');
+        return;
+    }
+
+    const confirmText = mode === 'selected'
+        ? `Send this broadcast to ${userIds.length} selected user(s)?`
+        : 'Send this broadcast to all approved users?';
+    if (!confirm(confirmText)) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/notifications/broadcast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ title, body, mode, includeSelf, userIds })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            showToast(data.error || 'Broadcast failed', 'error');
+            return;
+        }
+        showToast(`Broadcast queued for ${data.summary.targetedCount} user(s)`, 'success');
+        document.getElementById('broadcastTitle').value = '';
+        document.getElementById('broadcastBody').value = '';
+        clearBroadcastSelection();
+        loadBroadcastRecipients();
+    } catch (error) {
+        showToast('Broadcast failed', 'error');
+    }
 }
 
 // ==================== CONNECTIONS ====================

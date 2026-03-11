@@ -96,6 +96,7 @@
             <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
             <button class="tab-btn" data-tab="users">👥 Users</button>
             <button class="tab-btn" data-tab="resets">🔑 Password Resets</button>
+            <button class="tab-btn" data-tab="broadcast">📢 Broadcast</button>
             <button class="tab-btn" data-tab="connections">🔗 Connections</button>
             <button class="tab-btn" data-tab="messages">💬 Messages</button>
             <button class="tab-btn" data-tab="invites">📧 Invite Codes</button>
@@ -174,7 +175,50 @@
             <div id="resetRequestsList">Loading...</div>
         </div>
 
-        <!-- TAB 4: CONNECTIONS -->
+        
+        <!-- TAB 4: BROADCAST -->
+        <div class="tab-content" id="tab-broadcast">
+            <div class="section-header">
+                <h2>📢 Broadcast Notifications</h2>
+                <div>
+                    <button class="btn btn-primary" id="refreshBroadcastRecipientsBtn">Refresh Recipients</button>
+                    <button class="btn btn-success" id="sendBroadcastBtn">Send Broadcast</button>
+                </div>
+            </div>
+            <div class="broadcast-grid">
+                <div class="broadcast-card">
+                    <div class="form-group">
+                        <label for="broadcastTitle">Notification Title</label>
+                        <input type="text" id="broadcastTitle" maxlength="80" placeholder="Example: Maintenance Alert">
+                    </div>
+                    <div class="form-group">
+                        <label for="broadcastBody">Notification Message</label>
+                        <textarea id="broadcastBody" rows="5" maxlength="240" placeholder="Write the message every selected user should receive."></textarea>
+                    </div>
+                    <div class="broadcast-mode-group">
+                        <label><input type="radio" name="broadcastMode" value="all" checked> All approved users</label>
+                        <label><input type="radio" name="broadcastMode" value="selected"> Selected users only</label>
+                        <label><input type="checkbox" id="broadcastIncludeSelf"> Include my account</label>
+                    </div>
+                    <div class="broadcast-summary" id="broadcastAudienceSummary">Loading recipients...</div>
+                </div>
+                <div class="broadcast-card">
+                    <div class="section-header compact">
+                        <h3>Recipients</h3>
+                        <div>
+                            <button class="btn btn-primary" id="broadcastSelectAllBtn">Select All</button>
+                            <button class="btn" id="broadcastClearSelectionBtn">Clear</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="broadcastUserSearch" placeholder="Search users...">
+                    </div>
+                    <div id="broadcastRecipientsList" class="broadcast-recipient-list">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: CONNECTIONS -->
         <div class="tab-content" id="tab-connections">
             <div class="section-header">
                 <h2>🔗 User Connections</h2>
@@ -183,7 +227,7 @@
             <div id="connectionsList">Loading...</div>
         </div>
 
-        <!-- TAB 5: MESSAGES -->
+        <!-- TAB 6: MESSAGES -->
         <div class="tab-content" id="tab-messages">
             <div class="section-header">
                 <h2>💬 Recent Messages</h2>
@@ -192,7 +236,7 @@
             <div id="messagesList">Loading...</div>
         </div>
 
-        <!-- TAB 6: INVITE CODES -->
+        <!-- TAB 7: INVITE CODES -->
         <div class="tab-content" id="tab-invites">
             <div class="section-header">
                 <h2>📧 Invite Codes</h2>
@@ -201,7 +245,7 @@
             <div id="invitesList">Loading...</div>
         </div>
 
-        <!-- TAB 7: LOGS -->
+        <!-- TAB 8: LOGS -->
         <div class="tab-content" id="tab-logs">
             <div class="section-header">
                 <h2>📋 System Logs</h2>

@@ -4,6 +4,7 @@ const prisma = require('../lib/prisma');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { isAuthenticated, isAdmin } = require('../middleware/auth');
+const { sendToUser } = require('../lib/firebaseAdmin');
 
 function generateTemporaryPassword() {
   return Math.random().toString(36).substring(2, 6).toUpperCase() +
@@ -12,6 +13,23 @@ function generateTemporaryPassword() {
 
 function generateOneTimePassword() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function writeSystemLog(action, details, metadata = null) {
+  try {
+    await prisma.system_logs.create({
+      data: {
+        level: 'INFO',
+        action,
+        message: details,
+        details,
+        event_type: action,
+        metadata: metadata ? JSON.stringify(metadata) : null
+      }
+    });
+  } catch (error) {
+    console.error('System log write failed:', error.message);
+  }
 }
 
 // Dashboard stats
@@ -610,6 +628,158 @@ router.delete('/invites/:code', isAuthenticated, isAdmin, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed' });
+  }
+});
+
+// ==================== BROADCAST NOTIFICATIONS ====================
+
+router.get('/notifications/recipients', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const users = await prisma.users.findMany({
+      where: { is_approved: true },
+      select: {
+        user_id: true,
+        username: true,
+        full_name: true,
+        is_admin: true
+      },
+      orderBy: [
+        { is_admin: 'desc' },
+        { username: 'asc' }
+      ]
+    });
+
+    const tokenGroups = await prisma.device_tokens.groupBy({
+      by: ['user_id'],
+      where: { is_active: true },
+      _count: { _all: true }
+    });
+
+    const activeTokenCount = new Map(tokenGroups.map(row => [row.user_id, row._count._all]));
+    const recipients = users.map(user => ({
+      userId: user.user_id,
+      username: user.username,
+      fullName: user.full_name,
+      isAdmin: user.is_admin,
+      activeTokenCount: activeTokenCount.get(user.user_id) || 0
+    }));
+
+    res.json({
+      success: true,
+      recipients,
+      summary: {
+        totalUsers: recipients.length,
+        activeTokenUsers: recipients.filter(r => r.activeTokenCount > 0).length
+      }
+    });
+  } catch (error) {
+    console.error('Broadcast recipients error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load broadcast recipients' });
+  }
+});
+
+router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const title = String(req.body?.title || '').trim();
+    const body = String(req.body?.body || '').trim();
+    const mode = req.body?.mode === 'selected' ? 'selected' : 'all';
+    const includeSelf = req.body?.includeSelf === true;
+    const selectedIdsRaw = Array.isArray(req.body?.userIds) ? req.body.userIds : [];
+    const selectedIds = selectedIdsRaw
+      .map((value) => parseInt(value, 10))
+      .filter((value) => Number.isInteger(value) && value > 0);
+
+    if (!title) {
+      return res.status(400).json({ success: false, error: 'Notification title is required' });
+    }
+    if (!body) {
+      return res.status(400).json({ success: false, error: 'Notification message is required' });
+    }
+    if (title.length > 80) {
+      return res.status(400).json({ success: false, error: 'Notification title is too long' });
+    }
+    if (body.length > 240) {
+      return res.status(400).json({ success: false, error: 'Notification message is too long' });
+    }
+    if (mode === 'selected' && selectedIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Select at least one user' });
+    }
+
+    const where = {
+      is_approved: true,
+      ...(mode === 'selected' ? { user_id: { in: selectedIds } } : {})
+    };
+    if (!includeSelf) {
+      where.user_id = where.user_id
+        ? { ...where.user_id, not: req.user.user_id }
+        : { not: req.user.user_id };
+    }
+
+    const targetUsers = await prisma.users.findMany({
+      where,
+      select: {
+        user_id: true,
+        username: true,
+        full_name: true,
+        is_admin: true
+      },
+      orderBy: { username: 'asc' }
+    });
+
+    if (targetUsers.length === 0) {
+      return res.status(400).json({ success: false, error: 'No users matched this broadcast' });
+    }
+
+    const broadcastId = `broadcast-${Date.now()}`;
+    const sendResults = await Promise.allSettled(
+      targetUsers.map((user) =>
+        sendToUser(prisma, user.user_id, {
+          type: 'broadcast',
+          messageId: broadcastId,
+          senderId: req.user.user_id,
+          chatUserId: 0,
+          senderName: title,
+          previewText: body,
+          sentAt: new Date().toISOString()
+        })
+      )
+    );
+
+    const failedUsers = targetUsers
+      .filter((_, index) => sendResults[index].status === 'rejected')
+      .map((user) => ({
+        userId: user.user_id,
+        username: user.username
+      }));
+
+    await writeSystemLog(
+      'ADMIN_BROADCAST_SENT',
+      `Broadcast "${title}" sent by admin ${req.user.username || req.user.user_id}`,
+      {
+        adminId: req.user.user_id,
+        title,
+        mode,
+        includeSelf,
+        targetedCount: targetUsers.length,
+        failedCount: failedUsers.length,
+        targetUserIds: targetUsers.map((user) => user.user_id)
+      }
+    );
+
+    res.json({
+      success: true,
+      summary: {
+        title,
+        mode,
+        includeSelf,
+        targetedCount: targetUsers.length,
+        failedCount: failedUsers.length
+      },
+      failedUsers
+    });
+  } catch (error) {
+    console.error('Broadcast send error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send broadcast notification' });
   }
 });
 
