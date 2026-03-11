@@ -67,13 +67,14 @@ async function sendPushNotification(token, data = {}) {
             },
             android: {
                 priority: 'high',
-                ttl: 60 * 1000,
+                ttl: 5 * 60 * 1000,
                 collapseKey: data.chatUserId ? `chat_${data.chatUserId}` : 'chat_updates',
                 directBootOk: true
             }
         };
 
         await fb.messaging().send(message);
+        console.log(`[FCM] Sent type=${message.data.type} chatUserId=${message.data.chatUserId} messageId=${message.data.messageId}`);
         return 'ok';
 
     } catch (err) {
@@ -105,6 +106,7 @@ async function sendToUser(prisma, userId, data = {}) {
         console.warn(`[FCM] No active tokens for user ${userId}`);
         return;
     }
+    console.log(`[FCM] Preparing push for user ${userId} tokens=${tokens.length} type=${data.type || 'new_message'} chatUserId=${data.chatUserId || ''} messageId=${data.messageId || ''}`);
 
     let unreadCount = Number(data.unreadCount || 0);
     if (!Number.isFinite(unreadCount) || unreadCount <= 0) {

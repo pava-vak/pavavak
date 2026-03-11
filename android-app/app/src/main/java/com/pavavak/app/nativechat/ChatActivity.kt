@@ -135,7 +135,7 @@ class ChatActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.chatEmpty)
         recycler = findViewById(R.id.messagesRecycler)
         swipeRefresh = findViewById(R.id.chatSwipeRefresh)
-        swipeRefresh.setOnRefreshListener { refreshMessagesSilently() }
+        swipeRefresh.setOnRefreshListener { refreshMessagesSilently(forceFull = true) }
         recycler.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
         localStore = LocalChatStore(LocalDatabaseProvider.get(this))
 
@@ -212,7 +212,7 @@ class ChatActivity : AppCompatActivity() {
                 emptyText.visibility = View.VISIBLE
                 emptyText.text = "Chat initialization issue. Pull to refresh."
                 recycler.visibility = View.INVISIBLE
-                swipeRefresh.setOnRefreshListener { refreshMessagesSilently() }
+                swipeRefresh.setOnRefreshListener { refreshMessagesSilently(forceFull = true) }
             }
         }
     }
@@ -250,7 +250,7 @@ class ChatActivity : AppCompatActivity() {
         if (initialResumeRefreshPending) {
             initialResumeRefreshPending = false
         } else {
-            lifecycleScope.launch { refreshMessagesSilently() }
+            lifecycleScope.launch { refreshMessagesSilently(forceFull = true) }
         }
     }
 
@@ -300,29 +300,18 @@ class ChatActivity : AppCompatActivity() {
                 updateToolbarPresence()
             }
 
-            val latestServerMessageId = withContext(Dispatchers.IO) { localStore.latestServerMessageId(otherUserId) }
-            val list = NativeApi.getMessages(otherUserId, latestServerMessageId)
-            Log.d(tag, "loadMessages serverCount=${list.size} pendingCount=${pendingMessages.size} afterId=${latestServerMessageId ?: 0}")
-            if (cached.isEmpty()) {
-                val signature = buildServerSignature(list)
-                val changed = signature != lastServerSignature
-                if (changed) {
-                    applyServerMessages(list)
-                    markIncomingAsRead(list)
-                    syncListVisibility()
-                    withContext(Dispatchers.IO) {
-                        localStore.cacheMessages(otherUserId, messages)
-                    }
-                    lastServerSignature = signature
-                }
-            } else if (list.isNotEmpty()) {
-                mergeIncrementalServerMessages(list)
-                markIncomingAsRead(list)
+            val list = NativeApi.getMessages(otherUserId)
+            Log.d(tag, "loadMessages fullSyncCount=${list.size} cached=${cached.size} pendingCount=${pendingMessages.size}")
+            markIncomingAsRead(list)
+            val signature = buildServerSignature(list)
+            val changed = signature != lastServerSignature || cached.isEmpty()
+            if (changed) {
+                applyServerMessages(list)
                 syncListVisibility()
                 withContext(Dispatchers.IO) {
                     localStore.cacheMessages(otherUserId, messages)
                 }
-                lastServerSignature = buildServerSignature(messages.filter { isServerMessageId(it.id) })
+                lastServerSignature = signature
             }
 
             progress.visibility = View.GONE
@@ -339,7 +328,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshMessagesSilently() {
+    private fun refreshMessagesSilently(forceFull: Boolean = false) {
         if (decoyMode) {
             swipeRefresh.isRefreshing = false
             return
@@ -348,19 +337,40 @@ class ChatActivity : AppCompatActivity() {
             try {
             val wasAtBottom = isAtBottom()
             val prevLastId = messages.lastOrNull()?.id
-            val latestServerMessageId = withContext(Dispatchers.IO) { localStore.latestServerMessageId(otherUserId) }
+            val latestServerMessageId = if (forceFull) {
+                null
+            } else {
+                withContext(Dispatchers.IO) { localStore.latestServerMessageId(otherUserId) }
+            }
             val list = NativeApi.getMessages(otherUserId, latestServerMessageId)
-            Log.d(tag, "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size} afterId=${latestServerMessageId ?: 0}")
-            if (list.isNotEmpty()) {
+            Log.d(
+                tag,
+                "refreshMessagesSilently serverCount=${list.size} pendingCount=${pendingMessages.size} forceFull=$forceFull afterId=${latestServerMessageId ?: 0}"
+            )
+            if (forceFull) {
+                markIncomingAsRead(list)
+                val signature = buildServerSignature(list)
+                val changed = signature != lastServerSignature
+                if (changed) {
+                    applyServerMessages(list)
+                    withContext(Dispatchers.IO) {
+                        localStore.cacheMessages(otherUserId, messages)
+                    }
+                    lastServerSignature = signature
+                }
+            } else if (list.isNotEmpty()) {
                 mergeIncrementalServerMessages(list)
                 markIncomingAsRead(list)
                 withContext(Dispatchers.IO) {
                     localStore.cacheMessages(otherUserId, messages)
                 }
                 lastServerSignature = buildServerSignature(messages.filter { isServerMessageId(it.id) })
+            }
+
+            if (forceFull || list.isNotEmpty()) {
                 val newLastId = messages.lastOrNull()?.id
                 val hasNewTail = newLastId != null && newLastId != prevLastId
-                if (messages.isNotEmpty() && (wasAtBottom || hasNewTail)) {
+                if (messages.isNotEmpty() && (wasAtBottom || hasNewTail || forceFull)) {
                     recycler.scrollToPosition((messages.size - 1).coerceAtLeast(0))
                 }
             }
@@ -485,7 +495,7 @@ class ChatActivity : AppCompatActivity() {
                         Toast.makeText(this@ChatActivity, result.error.ifBlank { "Edit failed" }, Toast.LENGTH_SHORT).show()
                         return@launch
                     }
-                    refreshMessagesSilently()
+                    refreshMessagesSilently(forceFull = true)
                 }
             }
             .show()
@@ -503,7 +513,7 @@ class ChatActivity : AppCompatActivity() {
                     lifecycleScope.launch(Dispatchers.IO) {
                         NativeApi.sendReaction(otherUserId, message.id, message.reaction)
                     }
-                    lifecycleScope.launch { refreshMessagesSilently() }
+                    lifecycleScope.launch { refreshMessagesSilently(forceFull = true) }
                 }
             }
             .show()
@@ -695,7 +705,7 @@ class ChatActivity : AppCompatActivity() {
                 localStore.markPendingSynced(pendingLocal.id, otherUserId, sent.message)
             }
             updateToolbarPresence()
-            refreshMessagesSilently()
+            refreshMessagesSilently(forceFull = true)
         }
     }
 
@@ -959,8 +969,12 @@ class ChatActivity : AppCompatActivity() {
                 showEditChatNameDialog()
                 true
             }
+            R.id.action_toggle_chat_photo -> {
+                toggleChatPhotoVisibility()
+                true
+            }
             R.id.action_refresh_status -> {
-                refreshMessagesSilently()
+                refreshMessagesSilently(forceFull = true)
                 true
             }
             R.id.action_presence_info -> {
@@ -1010,6 +1024,17 @@ class ChatActivity : AppCompatActivity() {
             )
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun toggleChatPhotoVisibility() {
+        val currentlyHidden = AvatarVisibilityPrefs.isHidden(this, otherUserId)
+        AvatarVisibilityPrefs.setHidden(this, otherUserId, !currentlyHidden)
+        renderToolbarHeader()
+        Toast.makeText(
+            this,
+            if (currentlyHidden) "Profile photo shown for this contact" else "Profile photo hidden for this contact",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun updateToolbarPresence() {
@@ -1106,7 +1131,10 @@ class ChatActivity : AppCompatActivity() {
         val title = if (decoyMode) "$currentChatName (Decoy)" else currentChatName
         toolbarName.text = title
         toolbarAvatarFallback.text = currentChatName.take(1).uppercase()
-        val avatar = AvatarUtils.decodeBase64Avatar(currentChatPhotoBase64)
+        val photoHidden = AvatarVisibilityPrefs.isHidden(this, otherUserId)
+        toolbar.menu?.findItem(R.id.action_toggle_chat_photo)?.title =
+            if (photoHidden) "Show profile photo" else "Hide profile photo"
+        val avatar = if (photoHidden) null else AvatarUtils.decodeBase64Avatar(currentChatPhotoBase64)
         if (avatar != null) {
             toolbarAvatarImage.setImageBitmap(avatar)
             toolbarAvatarImage.visibility = View.VISIBLE
