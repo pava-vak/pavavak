@@ -53,10 +53,21 @@ function getFirebaseAdmin() {
 async function sendPushNotification(token, data = {}) {
     try {
         const fb = getFirebaseAdmin();
+        const type = data.type || 'new_message';
+        const fallbackTitle = type === 'broadcast' ? 'Announcements' : 'PaVa-Vak';
+        const fallbackBody = type === 'broadcast'
+            ? String(data.previewText || 'New announcement')
+            : (type === 'new_message_photo'
+                ? 'Open PaVa-Vak to view a new photo'
+                : 'Open PaVa-Vak to view a new message');
         const message = {
             token,
+            notification: {
+                title: fallbackTitle,
+                body: fallbackBody
+            },
             data: {
-                type: data.type || 'new_message',
+                type,
                 messageId: String(data.messageId || ''),
                 senderId: String(data.senderId || ''),
                 chatUserId: String(data.chatUserId || ''),
@@ -67,14 +78,21 @@ async function sendPushNotification(token, data = {}) {
             },
             android: {
                 priority: 'high',
-                ttl: 5 * 60 * 1000,
+                ttl: 24 * 60 * 60 * 1000,
                 collapseKey: data.chatUserId ? `chat_${data.chatUserId}` : 'chat_updates',
-                directBootOk: true
+                directBootOk: true,
+                notification: {
+                    channelId: 'messages_private',
+                    tag: data.chatUserId ? `chat_${data.chatUserId}` : `broadcast_${data.messageId || 'latest'}`,
+                    visibility: 'PRIVATE',
+                    priority: 'HIGH',
+                    defaultSound: true
+                }
             }
         };
 
         await fb.messaging().send(message);
-        console.log(`[FCM] Sent type=${message.data.type} chatUserId=${message.data.chatUserId} messageId=${message.data.messageId}`);
+        console.log(`[FCM] Sent type=${message.data.type} chatUserId=${message.data.chatUserId} messageId=${message.data.messageId} fallback=notification+data ttlHours=24`);
         return 'ok';
 
     } catch (err) {
