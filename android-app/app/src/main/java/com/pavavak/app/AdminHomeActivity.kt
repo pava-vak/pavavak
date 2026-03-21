@@ -55,6 +55,18 @@ class AdminHomeActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.adminReviewConvBtn).setOnClickListener {
             startActivity(Intent(this, AdminConversationListActivity::class.java))
         }
+        findViewById<MaterialButton>(R.id.adminUsersBtn).setOnClickListener {
+            startActivity(Intent(this, AdminUsersActivity::class.java))
+        }
+        findViewById<MaterialButton>(R.id.adminInvitesBtn).setOnClickListener {
+            startActivity(Intent(this, AdminInvitesActivity::class.java))
+        }
+        findViewById<MaterialButton>(R.id.adminManageConnectionsBtn).setOnClickListener {
+            startActivity(Intent(this, AdminManageConnectionsActivity::class.java))
+        }
+        findViewById<MaterialButton>(R.id.adminBroadcastBtn).setOnClickListener {
+            startActivity(Intent(this, AdminBroadcastActivity::class.java))
+        }
 
         findViewById<MaterialButton>(R.id.adminLogoutBtn).setOnClickListener {
             lifecycleScope.launch {

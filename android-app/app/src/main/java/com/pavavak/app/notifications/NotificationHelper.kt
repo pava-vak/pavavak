@@ -111,7 +111,7 @@ object NotificationHelper {
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(titleText)
             .setContentText(contentText)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setCategory(if (isChatPayload(payload)) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
             .setVisibility(
                 if (previewMode == NotificationPrefs.PREVIEW_FULL) {
                     NotificationCompat.VISIBILITY_PRIVATE
@@ -135,10 +135,10 @@ object NotificationHelper {
                 }
             )
 
-        if (NotificationPrefs.directReplyEnabled(context)) {
+        if (isChatPayload(payload) && NotificationPrefs.directReplyEnabled(context)) {
             builder.addAction(buildReplyAction(context, payload.chatUserId, resolvedName))
         }
-        if (NotificationPrefs.markReadEnabled(context)) {
+        if (isChatPayload(payload) && NotificationPrefs.markReadEnabled(context)) {
             builder.addAction(buildMarkReadAction(context, payload.chatUserId))
         }
         builder.addAction(buildStealthAction(context))
@@ -289,9 +289,14 @@ object NotificationHelper {
 
     private fun buildPreviewText(payload: NotificationPayload): String {
         return when (payload.type) {
+            "broadcast" -> payload.previewText?.takeIf { it.isNotBlank() } ?: "New announcement"
             "new_message_photo" -> "Photo received"
             else -> payload.previewText?.takeIf { it.isNotBlank() } ?: "New message"
         }
+    }
+
+    private fun isChatPayload(payload: NotificationPayload): Boolean {
+        return payload.chatUserId > 0 && payload.type != "broadcast"
     }
 
     private fun channelIdForMode(previewMode: Int): String {

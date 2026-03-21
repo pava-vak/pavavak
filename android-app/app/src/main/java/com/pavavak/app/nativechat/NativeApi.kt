@@ -663,6 +663,7 @@ object NativeApi {
             val c = arr.optJSONObject(i) ?: continue
             out.add(
                 AdminConnection(
+                    connectionId = c.optInt("connectionId", 0),
                     user1Id = c.optInt("user1Id", 0),
                     user2Id = c.optInt("user2Id", 0),
                     user1Name = c.optString("user1Name", "User 1"),
@@ -697,6 +698,156 @@ object NativeApi {
     suspend fun adminClearConversation(user1Id: Int, user2Id: Int): Boolean = withContext(Dispatchers.IO) {
         val json = request("DELETE", "/api/messages/admin/conversation/$user1Id/$user2Id") ?: return@withContext false
         json.optBoolean("success", false)
+    }
+
+    suspend fun getAdminPendingUsers(): List<AdminUser> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/users/pending") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("pendingUsers") ?: JSONArray()
+        buildAdminUsers(arr, approvedFallback = false)
+    }
+
+    suspend fun getAdminUsers(): List<AdminUser> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/users") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("users") ?: JSONArray()
+        buildAdminUsers(arr, approvedFallback = true)
+    }
+
+    suspend fun approveAdminUser(userId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/admin/users/$userId/approve") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun rejectAdminUser(userId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/admin/users/$userId/reject") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun getAdminInvites(): List<AdminInvite> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/invites") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("invites") ?: JSONArray()
+        val out = mutableListOf<AdminInvite>()
+        for (i in 0 until arr.length()) {
+            val invite = arr.optJSONObject(i) ?: continue
+            out.add(
+                AdminInvite(
+                    code = invite.optString("code", ""),
+                    used = invite.optBoolean("used", false),
+                    createdAt = formatTime(invite.optString("createdAt", "")),
+                    usedByUsername = invite.optString("usedBy", "").takeIf { it.isNotBlank() }
+                )
+            )
+        }
+        out
+    }
+
+    suspend fun generateAdminInvite(): List<String> = withContext(Dispatchers.IO) {
+        val json = request("POST", "/api/admin/invites/generate") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("codes") ?: JSONArray()
+        List(arr.length()) { index -> arr.optString(index, "") }.filter { it.isNotBlank() }
+    }
+
+    suspend fun deleteAdminInvite(code: String): Boolean = withContext(Dispatchers.IO) {
+        val json = request("DELETE", "/api/admin/invites/$code") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun getAdminConnectionPairs(): List<AdminConnection> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/connections") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("connections") ?: JSONArray()
+        val out = mutableListOf<AdminConnection>()
+        for (i in 0 until arr.length()) {
+            val c = arr.optJSONObject(i) ?: continue
+            val user1 = c.optJSONObject("user1")
+            val user2 = c.optJSONObject("user2")
+            out.add(
+                AdminConnection(
+                    connectionId = c.optInt("connectionId", 0),
+                    user1Id = user1?.optInt("user_id", 0) ?: 0,
+                    user2Id = user2?.optInt("user_id", 0) ?: 0,
+                    user1Name = user1?.optString("full_name", "").takeUnless { it.isNullOrBlank() }
+                        ?: user1?.optString("username", "User 1").orEmpty(),
+                    user2Name = user2?.optString("full_name", "").takeUnless { it.isNullOrBlank() }
+                        ?: user2?.optString("username", "User 2").orEmpty()
+                )
+            )
+        }
+        out
+    }
+
+    suspend fun createAdminConnection(user1Id: Int, user2Id: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request(
+            "POST",
+            "/api/admin/connections/create",
+            JSONObject()
+                .put("user1Id", user1Id)
+                .put("user2Id", user2Id)
+        ) ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun deleteAdminConnection(connectionId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("DELETE", "/api/admin/connections/$connectionId") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun getAdminBroadcastRecipients(): List<AdminBroadcastRecipient> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/admin/notifications/recipients") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("recipients") ?: JSONArray()
+        val out = mutableListOf<AdminBroadcastRecipient>()
+        for (i in 0 until arr.length()) {
+            val user = arr.optJSONObject(i) ?: continue
+            out.add(
+                AdminBroadcastRecipient(
+                    userId = user.optInt("userId", 0),
+                    username = user.optString("username", ""),
+                    fullName = user.optString("fullName", ""),
+                    isAdmin = user.optBoolean("isAdmin", false),
+                    activeTokenCount = user.optInt("activeTokenCount", 0)
+                )
+            )
+        }
+        out
+    }
+
+    suspend fun sendAdminBroadcast(
+        title: String,
+        body: String,
+        mode: String,
+        includeSelf: Boolean,
+        userIds: List<Int>
+    ): AdminBroadcastResult? = withContext(Dispatchers.IO) {
+        val json = request(
+            "POST",
+            "/api/admin/notifications/broadcast",
+            JSONObject()
+                .put("title", title)
+                .put("body", body)
+                .put("mode", mode)
+                .put("includeSelf", includeSelf)
+                .put("userIds", JSONArray(userIds))
+        ) ?: return@withContext null
+        if (!json.optBoolean("success", false)) return@withContext null
+        val summaryJson = json.optJSONObject("summary") ?: JSONObject()
+        val failedUsers = json.optJSONArray("failedUsers").toUsernames()
+        val skippedUsers = json.optJSONArray("skippedUsers").toUsernames()
+        AdminBroadcastResult(
+            summary = AdminBroadcastSummary(
+                targetedCount = summaryJson.optInt("targetedCount", 0),
+                usersWithActiveTokens = summaryJson.optInt("usersWithActiveTokens", 0),
+                sentUsers = summaryJson.optInt("sentUsers", 0),
+                sentNotifications = summaryJson.optInt("sentNotifications", 0),
+                skippedNoTokenCount = summaryJson.optInt("skippedNoTokenCount", 0),
+                failedCount = summaryJson.optInt("failedCount", 0)
+            ),
+            failedUsers = failedUsers,
+            skippedUsers = skippedUsers
+        )
     }
 
     suspend fun connectRealtime(chatUserId: Int, listener: RealtimeListener): Boolean = withContext(Dispatchers.IO) {
@@ -938,6 +1089,10 @@ object NativeApi {
             path.contains("/auth/login") -> "Login failed. Please try again."
             path.contains("/auth/request-password-reset") -> "Couldn't send the reset request. Please try again."
             path.contains("/auth/complete-password-reset") -> "Couldn't update your password. Please try again."
+            path.contains("/api/admin/notifications/") -> "Couldn't complete the broadcast right now."
+            path.contains("/api/admin/users") -> "Couldn't load admin users right now."
+            path.contains("/api/admin/invites") -> "Couldn't manage invite codes right now."
+            path.contains("/api/admin/connections") -> "Couldn't manage connections right now."
             path.contains("/users/change-password") -> "Couldn't change your password. Please try again."
             path.contains("/users/delete-account") -> "Couldn't delete the account right now."
             path.contains("/users/profile") -> "Couldn't load your profile right now."
@@ -987,5 +1142,35 @@ object NativeApi {
                 "Something went wrong. Please try again."
             else -> fallback
         }
+    }
+
+    private fun buildAdminUsers(arr: JSONArray, approvedFallback: Boolean): List<AdminUser> {
+        val out = mutableListOf<AdminUser>()
+        for (i in 0 until arr.length()) {
+            val user = arr.optJSONObject(i) ?: continue
+            out.add(
+                AdminUser(
+                    userId = user.optInt("user_id", 0),
+                    username = user.optString("username", ""),
+                    fullName = user.optString("full_name", ""),
+                    email = user.optString("email", ""),
+                    isAdmin = user.optBoolean("is_admin", false),
+                    isApproved = if (user.has("is_approved")) user.optBoolean("is_approved", approvedFallback) else approvedFallback,
+                    createdAt = formatTime(user.optString("created_at", ""))
+                )
+            )
+        }
+        return out
+    }
+
+    private fun JSONArray?.toUsernames(): List<String> {
+        if (this == null) return emptyList()
+        val out = mutableListOf<String>()
+        for (i in 0 until length()) {
+            val item = optJSONObject(i) ?: continue
+            val username = item.optString("username", "").trim()
+            if (username.isNotBlank()) out.add(username)
+        }
+        return out
     }
 }

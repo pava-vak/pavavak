@@ -99,12 +99,26 @@ async function sendToUser(prisma, userId, data = {}) {
         });
     } catch (err) {
         console.error('[FCM] DB error fetching tokens:', err.message);
-        return;
+        return {
+            tokenCount: 0,
+            okCount: 0,
+            invalidCount: 0,
+            errorCount: 1,
+            skippedNoToken: false,
+            dbError: true
+        };
     }
 
     if (tokens.length === 0) {
         console.warn(`[FCM] No active tokens for user ${userId}`);
-        return;
+        return {
+            tokenCount: 0,
+            okCount: 0,
+            invalidCount: 0,
+            errorCount: 0,
+            skippedNoToken: true,
+            dbError: false
+        };
     }
     console.log(`[FCM] Preparing push for user ${userId} tokens=${tokens.length} type=${data.type || 'new_message'} chatUserId=${data.chatUserId || ''} messageId=${data.messageId || ''}`);
 
@@ -150,6 +164,15 @@ async function sendToUser(prisma, userId, data = {}) {
     if (errCount > 0) {
         console.warn(`[FCM] Failed ${errCount}/${tokens.length} notification(s) for user ${userId}`);
     }
+
+    return {
+        tokenCount: tokens.length,
+        okCount,
+        invalidCount: invalidTokens.length,
+        errorCount: errCount,
+        skippedNoToken: false,
+        dbError: false
+    };
 }
 
 module.exports = { getFirebaseAdmin, sendPushNotification, sendToUser };

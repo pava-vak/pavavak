@@ -732,8 +732,9 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
 
     const broadcastId = `broadcast-${Date.now()}`;
     const sendResults = await Promise.allSettled(
-      targetUsers.map((user) =>
-        sendToUser(prisma, user.user_id, {
+      targetUsers.map(async (user) => ({
+        user,
+        delivery: await sendToUser(prisma, user.user_id, {
           type: 'broadcast',
           messageId: broadcastId,
           senderId: req.user.user_id,
@@ -742,14 +743,38 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
           previewText: body,
           sentAt: new Date().toISOString()
         })
-      )
+      }))
     );
 
-    const failedUsers = targetUsers
-      .filter((_, index) => sendResults[index].status === 'rejected')
-      .map((user) => ({
-        userId: user.user_id,
-        username: user.username
+    const resolvedResults = sendResults.map((result, index) => {
+      if (result.status === 'fulfilled') return result.value;
+      return {
+        user: targetUsers[index],
+        delivery: {
+          tokenCount: 0,
+          okCount: 0,
+          invalidCount: 0,
+          errorCount: 1,
+          skippedNoToken: false,
+          dbError: true
+        }
+      };
+    });
+
+    const usersWithActiveTokens = resolvedResults.filter((entry) => entry.delivery.tokenCount > 0).length;
+    const sentUsers = resolvedResults.filter((entry) => entry.delivery.okCount > 0).length;
+    const sentNotifications = resolvedResults.reduce((sum, entry) => sum + entry.delivery.okCount, 0);
+    const skippedUsers = resolvedResults
+      .filter((entry) => entry.delivery.skippedNoToken)
+      .map((entry) => ({
+        userId: entry.user.user_id,
+        username: entry.user.username
+      }));
+    const failedUsers = resolvedResults
+      .filter((entry) => entry.delivery.errorCount > 0 && entry.delivery.okCount == 0)
+      .map((entry) => ({
+        userId: entry.user.user_id,
+        username: entry.user.username
       }));
 
     await writeSystemLog(
@@ -761,6 +786,10 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
         mode,
         includeSelf,
         targetedCount: targetUsers.length,
+        usersWithActiveTokens,
+        sentUsers,
+        sentNotifications,
+        skippedNoTokenCount: skippedUsers.length,
         failedCount: failedUsers.length,
         targetUserIds: targetUsers.map((user) => user.user_id)
       }
@@ -773,9 +802,14 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
         mode,
         includeSelf,
         targetedCount: targetUsers.length,
+        usersWithActiveTokens,
+        sentUsers,
+        sentNotifications,
+        skippedNoTokenCount: skippedUsers.length,
         failedCount: failedUsers.length
       },
-      failedUsers
+      failedUsers,
+      skippedUsers
     });
   } catch (error) {
     console.error('Broadcast send error:', error);

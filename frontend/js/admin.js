@@ -737,14 +737,34 @@ async function sendBroadcastNotification() {
             showToast(data.error || 'Broadcast failed', 'error');
             return;
         }
-        showToast(`Broadcast queued for ${data.summary.targetedCount} user(s)`, 'success');
+        showToast(formatBroadcastResult(data.summary), data.summary.failedCount > 0 ? 'info' : 'success');
         document.getElementById('broadcastTitle').value = '';
         document.getElementById('broadcastBody').value = '';
         clearBroadcastSelection();
+        updateBroadcastSummaryFromSend(data.summary, data.failedUsers || [], data.skippedUsers || []);
         loadBroadcastRecipients();
     } catch (error) {
         showToast('Broadcast failed', 'error');
     }
+}
+
+function formatBroadcastResult(summary) {
+    const sentUsers = summary?.sentUsers ?? 0;
+    const targeted = summary?.targetedCount ?? 0;
+    const skipped = summary?.skippedNoTokenCount ?? 0;
+    const failed = summary?.failedCount ?? 0;
+    return `Broadcast sent to ${sentUsers}/${targeted} user(s). Skipped ${skipped} with no device token${skipped === 1 ? '' : 's'}${failed > 0 ? `. Failed for ${failed}.` : '.'}`;
+}
+
+function updateBroadcastSummaryFromSend(summary, failedUsers = [], skippedUsers = []) {
+    const summaryEl = document.getElementById('broadcastAudienceSummary');
+    const failedText = failedUsers.length
+        ? ` Failed: ${failedUsers.map(user => `@${user.username}`).join(', ')}.`
+        : '';
+    const skippedText = skippedUsers.length
+        ? ` No active token: ${skippedUsers.map(user => `@${user.username}`).join(', ')}.`
+        : '';
+    summaryEl.textContent = `${formatBroadcastResult(summary)}${skippedText}${failedText}`.trim();
 }
 
 // ==================== CONNECTIONS ====================

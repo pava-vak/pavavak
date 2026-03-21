@@ -61,6 +61,7 @@ data class AdminMessage(
 )
 
 data class AdminConnection(
+    val connectionId: Int = 0,
     val user1Id: Int,
     val user2Id: Int,
     val user1Name: String,
@@ -74,4 +75,44 @@ data class AdminConversationMessage(
     val senderName: String,
     val content: String,
     val sentAt: String
+)
+
+data class AdminUser(
+    val userId: Int,
+    val username: String,
+    val fullName: String,
+    val email: String,
+    val isAdmin: Boolean,
+    val isApproved: Boolean,
+    val createdAt: String
+)
+
+data class AdminInvite(
+    val code: String,
+    val used: Boolean,
+    val createdAt: String,
+    val usedByUsername: String?
+)
+
+data class AdminBroadcastRecipient(
+    val userId: Int,
+    val username: String,
+    val fullName: String,
+    val isAdmin: Boolean,
+    val activeTokenCount: Int
+)
+
+data class AdminBroadcastSummary(
+    val targetedCount: Int,
+    val usersWithActiveTokens: Int,
+    val sentUsers: Int,
+    val sentNotifications: Int,
+    val skippedNoTokenCount: Int,
+    val failedCount: Int
+)
+
+data class AdminBroadcastResult(
+    val summary: AdminBroadcastSummary,
+    val failedUsers: List<String>,
+    val skippedUsers: List<String>
 )

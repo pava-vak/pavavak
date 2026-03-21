@@ -53,6 +53,26 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".AdminUsersActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".AdminInvitesActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".AdminManageConnectionsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".AdminBroadcastActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".AdminHomeActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
