@@ -37,6 +37,8 @@ object NotificationHelper {
     const val EXTRA_CHAT_USER_ID = "notif_chat_user_id"
     private const val EXTRA_CHAT_NAME = "notif_chat_name"
     private const val EXTRA_OPEN_FROM_NOTIFICATION = "notif_open"
+    private const val EXTRA_NOTIFICATION_TYPE = "notif_type"
+    private const val EXTRA_BROADCAST_ID = "notif_broadcast_id"
 
     private const val CHANNEL_ID_MESSAGES_PRIVATE = "messages_private"
     private const val CHANNEL_ID_MESSAGES_PREVIEW = "messages_preview"
@@ -94,7 +96,7 @@ object NotificationHelper {
             else -> resolvedName
         }
 
-        val openIntent = buildOpenPendingIntent(context, payload.chatUserId, resolvedName)
+        val openIntent = buildOpenPendingIntent(context, payload)
         val publicVersion = NotificationCompat.Builder(context, channelIdForMode(NotificationPrefs.PREVIEW_HIDDEN))
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("PaVa-Vak")
@@ -272,16 +274,20 @@ object NotificationHelper {
         ).build()
     }
 
-    private fun buildOpenPendingIntent(context: Context, chatUserId: Int, chatName: String): PendingIntent {
+    private fun buildOpenPendingIntent(context: Context, payload: NotificationPayload): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_OPEN_FROM_NOTIFICATION, true)
-            putExtra(EXTRA_CHAT_USER_ID, chatUserId)
-            putExtra(EXTRA_CHAT_NAME, chatName)
+            putExtra(EXTRA_NOTIFICATION_TYPE, if (isChatPayload(payload)) "chat" else "broadcast")
+            putExtra(EXTRA_CHAT_USER_ID, payload.chatUserId)
+            putExtra(EXTRA_CHAT_NAME, payload.senderName.ifBlank { "Chat" })
+            if (payload.type == "broadcast") {
+                putExtra(EXTRA_BROADCAST_ID, payload.messageId)
+            }
         }
         return PendingIntent.getActivity(
             context,
-            chatNotificationId(chatUserId),
+            chatNotificationId(if (payload.chatUserId > 0) payload.chatUserId else payload.messageId.hashCode()),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -310,11 +316,19 @@ object NotificationHelper {
     private fun chatNotificationId(chatUserId: Int): Int = CHAT_NOTIF_BASE + chatUserId
 
     fun notificationIntentWantsChat(intent: Intent?): Boolean =
-        intent?.getBooleanExtra(EXTRA_OPEN_FROM_NOTIFICATION, false) == true
+        intent?.getBooleanExtra(EXTRA_OPEN_FROM_NOTIFICATION, false) == true &&
+            intent.getStringExtra(EXTRA_NOTIFICATION_TYPE) != "broadcast"
 
     fun notificationChatId(intent: Intent?): Int =
         intent?.getIntExtra(EXTRA_CHAT_USER_ID, 0) ?: 0
 
     fun notificationChatName(intent: Intent?): String =
         intent?.getStringExtra(EXTRA_CHAT_NAME).orEmpty()
+
+    fun notificationIntentWantsBroadcasts(intent: Intent?): Boolean =
+        intent?.getBooleanExtra(EXTRA_OPEN_FROM_NOTIFICATION, false) == true &&
+            intent.getStringExtra(EXTRA_NOTIFICATION_TYPE) == "broadcast"
+
+    fun notificationBroadcastId(intent: Intent?): Int =
+        intent?.getStringExtra(EXTRA_BROADCAST_ID)?.toIntOrNull() ?: 0
 }

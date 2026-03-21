@@ -11,6 +11,11 @@
         android:showAsAction="never" />
 
     <item
+        android:id="@+id/action_broadcasts"
+        android:title="Announcements"
+        android:showAsAction="never" />
+
+    <item
         android:id="@+id/action_logout"
         android:title="Logout"
         android:showAsAction="never" />

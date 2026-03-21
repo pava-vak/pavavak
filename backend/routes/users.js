@@ -209,6 +209,103 @@ router.get('/stats', isAuthenticated, async (req, res) => {
   }
 });
 
+// User broadcast inbox
+router.get('/broadcasts', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+
+    const broadcasts = await prisma.$queryRaw`
+      SELECT
+        br.broadcast_id,
+        b.title,
+        b.body,
+        b.created_at,
+        br.read_at,
+        br.delivery_status,
+        br.sent_notifications,
+        br.failed_notifications,
+        creator.username AS created_by_username
+      FROM broadcast_recipients br
+      JOIN broadcasts b ON b.broadcast_id = br.broadcast_id
+      JOIN users creator ON creator.user_id = b.created_by_user_id
+      WHERE br.user_id = ${userId}
+      ORDER BY b.created_at DESC
+      LIMIT 100
+    `;
+
+    const unreadCount = broadcasts.filter(row => !row.read_at).length;
+
+    res.json({
+      success: true,
+      summary: {
+        total: broadcasts.length,
+        unread: unreadCount
+      },
+      broadcasts: broadcasts.map((row) => ({
+        broadcastId: Number(row.broadcast_id),
+        title: row.title,
+        body: row.body,
+        createdAt: row.created_at,
+        createdByUsername: row.created_by_username,
+        readAt: row.read_at,
+        isRead: !!row.read_at,
+        deliveryStatus: row.delivery_status,
+        sentNotifications: Number(row.sent_notifications || 0),
+        failedNotifications: Number(row.failed_notifications || 0)
+      }))
+    });
+  } catch (error) {
+    console.error('Error loading broadcasts:', error);
+    res.status(500).json({ success: false, error: 'Failed to load broadcasts' });
+  }
+});
+
+router.put('/broadcasts/:broadcastId/read', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const broadcastId = parseInt(req.params.broadcastId, 10);
+    if (!Number.isInteger(broadcastId) || broadcastId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid broadcast id' });
+    }
+
+    const updatedRows = await prisma.$queryRaw`
+      UPDATE broadcast_recipients
+      SET read_at = COALESCE(read_at, NOW())
+      WHERE broadcast_id = ${broadcastId}
+        AND user_id = ${userId}
+      RETURNING read_at
+    `;
+
+    if (!updatedRows.length) {
+      return res.status(404).json({ success: false, error: 'Broadcast not found' });
+    }
+
+    res.json({
+      success: true,
+      readAt: updatedRows[0].read_at
+    });
+  } catch (error) {
+    console.error('Error marking broadcast read:', error);
+    res.status(500).json({ success: false, error: 'Failed to update broadcast' });
+  }
+});
+
+router.put('/broadcasts/read-all', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    await prisma.$executeRaw`
+      UPDATE broadcast_recipients
+      SET read_at = COALESCE(read_at, NOW())
+      WHERE user_id = ${userId}
+        AND read_at IS NULL
+    `;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking all broadcasts read:', error);
+    res.status(500).json({ success: false, error: 'Failed to update broadcasts' });
+  }
+});
+
 // Delete account
 router.delete('/delete-account', isAuthenticated, async (req, res) => {
   try {

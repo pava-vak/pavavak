@@ -22,6 +22,7 @@ const prisma     = require('./lib/prisma'); // shared singleton - one pool for e
 const { ensurePresenceTypingSchema } = require('./lib/presenceTypingBootstrap');
 const { ensurePasswordResetSchema } = require('./lib/passwordResetBootstrap');
 const { ensureProfilePrivacySchema } = require('./lib/profilePrivacyBootstrap');
+const { ensureBroadcastSchema } = require('./lib/broadcastBootstrap');
 
 // =====================
 // INIT
@@ -570,6 +571,12 @@ async function startServer() {
     console.log('[BOOT] Profile/privacy schema ensured');
   } catch (e) {
     console.error('[BOOT] Profile/privacy schema bootstrap failed:', e.message);
+  }
+  try {
+    await ensureBroadcastSchema();
+    console.log('[BOOT] Broadcast schema ensured');
+  } catch (e) {
+    console.error('[BOOT] Broadcast schema bootstrap failed:', e.message);
   }
 
   server.listen(PORT, '0.0.0.0', () => {

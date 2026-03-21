@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.pavavak.app.BroadcastInboxActivity
 import com.pavavak.app.nativechat.ChatActivity
 import com.pavavak.app.nativechat.ChatListActivity
 import com.pavavak.app.nativechat.NativeApi
@@ -41,6 +42,12 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (NotificationHelper.notificationIntentWantsChat(intent)) {
+                AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
+                openLaunchTarget()
+                return@launch
+            }
+
+            if (NotificationHelper.notificationIntentWantsBroadcasts(intent)) {
                 AppSecurityPrefs.setDecoyModeActive(this@MainActivity, false)
                 openLaunchTarget()
                 return@launch
@@ -92,6 +99,9 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Intent(this, ChatListActivity::class.java)
             }
+        } else if (NotificationHelper.notificationIntentWantsBroadcasts(intent)) {
+            Intent(this, BroadcastInboxActivity::class.java)
+                .putExtra(BroadcastInboxActivity.EXTRA_TARGET_BROADCAST_ID, NotificationHelper.notificationBroadcastId(intent))
         } else {
             Intent(this, ChatListActivity::class.java)
         }

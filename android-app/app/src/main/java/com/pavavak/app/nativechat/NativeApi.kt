@@ -850,6 +850,39 @@ object NativeApi {
         )
     }
 
+    suspend fun getUserBroadcasts(): List<UserBroadcast> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/api/users/broadcasts") ?: return@withContext emptyList()
+        if (!json.optBoolean("success", false)) return@withContext emptyList()
+        val arr = json.optJSONArray("broadcasts") ?: JSONArray()
+        val out = mutableListOf<UserBroadcast>()
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            out.add(
+                UserBroadcast(
+                    broadcastId = item.optInt("broadcastId", 0),
+                    title = item.optString("title", ""),
+                    body = item.optString("body", ""),
+                    createdAt = formatTime(item.optString("createdAt", "")),
+                    createdByUsername = item.optString("createdByUsername", ""),
+                    isRead = item.optBoolean("isRead", false),
+                    readAt = item.optString("readAt", "").takeIf { it.isNotBlank() }?.let(::formatTime),
+                    deliveryStatus = item.optString("deliveryStatus", "")
+                )
+            )
+        }
+        out
+    }
+
+    suspend fun markBroadcastRead(broadcastId: Int): Boolean = withContext(Dispatchers.IO) {
+        val json = request("PUT", "/api/users/broadcasts/$broadcastId/read") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
+    suspend fun markAllBroadcastsRead(): Boolean = withContext(Dispatchers.IO) {
+        val json = request("PUT", "/api/users/broadcasts/read-all") ?: return@withContext false
+        json.optBoolean("success", false)
+    }
+
     suspend fun connectRealtime(chatUserId: Int, listener: RealtimeListener): Boolean = withContext(Dispatchers.IO) {
         try {
             disconnectRealtime()

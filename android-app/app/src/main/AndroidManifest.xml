@@ -53,6 +53,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".BroadcastInboxActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".AdminUsersActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

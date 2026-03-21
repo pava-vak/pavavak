@@ -678,6 +678,49 @@ router.get('/notifications/recipients', isAuthenticated, isAdmin, async (req, re
   }
 });
 
+router.get('/notifications/history', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT
+        b.broadcast_id,
+        b.title,
+        b.body,
+        b.created_at,
+        creator.username AS created_by_username,
+        COUNT(br.id)::int AS targeted_count,
+        COUNT(*) FILTER (WHERE br.sent_notifications > 0)::int AS sent_users,
+        COALESCE(SUM(br.sent_notifications), 0)::int AS sent_notifications,
+        COUNT(*) FILTER (WHERE br.delivery_status = 'no_token')::int AS skipped_no_token_count,
+        COUNT(*) FILTER (WHERE br.failed_notifications > 0 AND br.sent_notifications = 0)::int AS failed_count
+      FROM broadcasts b
+      JOIN users creator ON creator.user_id = b.created_by_user_id
+      LEFT JOIN broadcast_recipients br ON br.broadcast_id = b.broadcast_id
+      GROUP BY b.broadcast_id, creator.username
+      ORDER BY b.created_at DESC
+      LIMIT 50
+    `;
+
+    res.json({
+      success: true,
+      broadcasts: rows.map((row) => ({
+        broadcastId: Number(row.broadcast_id),
+        title: row.title,
+        body: row.body,
+        createdAt: row.created_at,
+        createdByUsername: row.created_by_username,
+        targetedCount: Number(row.targeted_count || 0),
+        sentUsers: Number(row.sent_users || 0),
+        sentNotifications: Number(row.sent_notifications || 0),
+        skippedNoTokenCount: Number(row.skipped_no_token_count || 0),
+        failedCount: Number(row.failed_count || 0)
+      }))
+    });
+  } catch (error) {
+    console.error('Broadcast history error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load broadcast history' });
+  }
+});
+
 router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, res) => {
   try {
     const title = String(req.body?.title || '').trim();
@@ -730,18 +773,31 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
       return res.status(400).json({ success: false, error: 'No users matched this broadcast' });
     }
 
-    const broadcastId = `broadcast-${Date.now()}`;
+    const insertedBroadcastRows = await prisma.$queryRaw`
+      INSERT INTO broadcasts (title, body, created_by_user_id, target_mode, include_self)
+      VALUES (${title}, ${body}, ${req.user.user_id}, ${mode}, ${includeSelf})
+      RETURNING broadcast_id, created_at
+    `;
+    const broadcastRow = insertedBroadcastRows?.[0];
+    const broadcastId = Number(broadcastRow?.broadcast_id || 0);
+    if (!Number.isInteger(broadcastId) || broadcastId <= 0) {
+      throw new Error('Broadcast record was not created');
+    }
+    const sentAtIso = (broadcastRow?.created_at || new Date()).toISOString?.()
+      ? broadcastRow.created_at.toISOString()
+      : new Date().toISOString();
+
     const sendResults = await Promise.allSettled(
       targetUsers.map(async (user) => ({
         user,
         delivery: await sendToUser(prisma, user.user_id, {
           type: 'broadcast',
-          messageId: broadcastId,
+          messageId: String(broadcastId),
           senderId: req.user.user_id,
           chatUserId: 0,
           senderName: title,
           previewText: body,
-          sentAt: new Date().toISOString()
+          sentAt: sentAtIso
         })
       }))
     );
@@ -777,11 +833,49 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
         username: entry.user.username
       }));
 
+    await prisma.$transaction(
+      resolvedResults.map((entry) => {
+        const delivery = entry.delivery || {};
+        const deliveryStatus = delivery.skippedNoToken
+          ? 'no_token'
+          : delivery.okCount > 0 && delivery.errorCount > 0
+            ? 'partial'
+            : delivery.okCount > 0
+              ? 'sent'
+              : 'failed';
+        return prisma.$executeRaw`
+          INSERT INTO broadcast_recipients (
+            broadcast_id,
+            user_id,
+            delivery_status,
+            token_count,
+            sent_notifications,
+            failed_notifications
+          )
+          VALUES (
+            ${broadcastId},
+            ${entry.user.user_id},
+            ${deliveryStatus},
+            ${delivery.tokenCount || 0},
+            ${delivery.okCount || 0},
+            ${delivery.errorCount || 0}
+          )
+          ON CONFLICT (broadcast_id, user_id)
+          DO UPDATE SET
+            delivery_status = EXCLUDED.delivery_status,
+            token_count = EXCLUDED.token_count,
+            sent_notifications = EXCLUDED.sent_notifications,
+            failed_notifications = EXCLUDED.failed_notifications
+        `;
+      })
+    );
+
     await writeSystemLog(
       'ADMIN_BROADCAST_SENT',
       `Broadcast "${title}" sent by admin ${req.user.username || req.user.user_id}`,
       {
         adminId: req.user.user_id,
+        broadcastId,
         title,
         mode,
         includeSelf,
@@ -798,6 +892,7 @@ router.post('/notifications/broadcast', isAuthenticated, isAdmin, async (req, re
     res.json({
       success: true,
       summary: {
+        broadcastId,
         title,
         mode,
         includeSelf,

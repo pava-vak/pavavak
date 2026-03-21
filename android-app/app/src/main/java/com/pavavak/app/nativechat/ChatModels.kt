@@ -116,3 +116,14 @@ data class AdminBroadcastResult(
     val failedUsers: List<String>,
     val skippedUsers: List<String>
 )
+
+data class UserBroadcast(
+    val broadcastId: Int,
+    val title: String,
+    val body: String,
+    val createdAt: String,
+    val createdByUsername: String,
+    val isRead: Boolean,
+    val readAt: String? = null,
+    val deliveryStatus: String = ""
+)

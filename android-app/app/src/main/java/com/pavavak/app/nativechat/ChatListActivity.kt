@@ -20,6 +20,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.pavavak.app.AppSecurityPrefs
+import com.pavavak.app.BroadcastInboxActivity
 import com.pavavak.app.LoginActivity
 import com.pavavak.app.R
 import com.pavavak.app.SettingsActivity
@@ -205,6 +206,10 @@ class ChatListActivity : AppCompatActivity() {
             }
             R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            R.id.action_broadcasts -> {
+                startActivity(Intent(this, BroadcastInboxActivity::class.java))
                 true
             }
             R.id.action_logout -> {
