@@ -90,6 +90,23 @@ function setupEventListeners() {
 
     // Event delegation for dynamic buttons
     document.addEventListener('click', handleDynamicClicks);
+
+    // Close modal when clicking the backdrop.
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+
+    // Escape should close any open modal.
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        document.querySelectorAll('.modal.active').forEach(modal => {
+            modal.classList.remove('active');
+        });
+    });
 }
 
 // Handle dynamic button clicks

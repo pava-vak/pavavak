@@ -34,7 +34,9 @@ class ChatListAdapter(
     override fun onBindViewHolder(holder: ChatListVH, position: Int) {
         val item = items[position]
         holder.avatar.text = item.name.take(1).uppercase()
-        val avatarBitmap = AvatarUtils.decodeBase64Avatar(item.profilePhotoBase64)
+        val userId = item.chatId.toIntOrNull()
+        val photoHidden = userId != null && AvatarVisibilityPrefs.isHidden(holder.itemView.context, userId)
+        val avatarBitmap = if (photoHidden) null else AvatarUtils.decodeBase64Avatar(item.profilePhotoBase64)
         if (avatarBitmap != null) {
             holder.avatarImage.setImageBitmap(avatarBitmap)
             holder.avatarImage.visibility = View.VISIBLE

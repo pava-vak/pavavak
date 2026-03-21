@@ -80,7 +80,7 @@
 
   function showInstallButton() {
     const btn = document.getElementById('pwa-install-btn');
-    if (btn) btn.style.display = '';
+    if (btn) btn.classList.remove('is-hidden');
 
     // Also show the install banner if present
     const banner = document.getElementById('pwa-install-banner');
@@ -89,7 +89,7 @@
 
   function hideInstallButton() {
     const btn = document.getElementById('pwa-install-btn');
-    if (btn) btn.style.display = 'none';
+    if (btn) btn.classList.add('is-hidden');
   }
 
   function hideInstallBanner() {

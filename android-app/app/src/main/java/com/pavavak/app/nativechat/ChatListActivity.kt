@@ -82,7 +82,7 @@ class ChatListActivity : AppCompatActivity() {
                 )
             },
             onLongClick = { chat ->
-                showRenameChatDialog(chat)
+                showChatActionsDialog(chat)
             }
         )
         rv.adapter = adapter
@@ -265,6 +265,25 @@ class ChatListActivity : AppCompatActivity() {
                         .putExtra(ChatActivity.EXTRA_CHAT_ID, numericId.toString())
                         .putExtra(ChatActivity.EXTRA_CHAT_NAME, name)
                 )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showChatActionsDialog(chat: ChatSummary) {
+        val id = chat.chatId.toIntOrNull() ?: return
+        val photoHidden = AvatarVisibilityPrefs.isHidden(this, id)
+        val actions = mutableListOf(
+            "Edit contact name" to { showRenameChatDialog(chat) },
+            (if (photoHidden) "Show profile photo" else "Hide profile photo") to {
+                AvatarVisibilityPrefs.setHidden(this, id, !photoHidden)
+                loadChats()
+            }
+        )
+        AlertDialog.Builder(this)
+            .setTitle(chat.name)
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
+                actions[which].second.invoke()
             }
             .setNegativeButton("Cancel", null)
             .show()

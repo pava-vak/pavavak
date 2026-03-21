@@ -54,10 +54,7 @@
             <button class="btn-chat" id="chatBtn">Go to Chat</button>
 
             <!-- PWA Install Button — hidden until browser is ready -->
-            <button id="pwa-install-btn"
-                    style="display:none; padding:6px 12px; background:#34a853;
-                           color:white; border:none; border-radius:6px;
-                           font-size:13px; cursor:pointer;">
+            <button id="pwa-install-btn" class="pwa-install-btn is-hidden">
                 📲 Install
             </button>
 
@@ -145,7 +142,7 @@
                            autocomplete="off" spellcheck="false">
                 </div>
                 <!-- overflow-x:auto makes table scroll on mobile instead of breaking layout -->
-                <div style="overflow-x:auto;">
+                <div class="table-scroll-wrapper">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -414,7 +411,6 @@
          pwa.js   — service worker + install prompt + offline bar
     ════════════════════════════════════════════════════════ -->
     <script src="js/admin.js"></script>
-    <script src="js/admin-messages.js"></script>
     <script src="js/pwa.js"></script>
 
     <!-- ═══════════════════════════════════════════════════════
@@ -422,24 +418,5 @@
          1. Click outside modal backdrop to close
          2. Press Escape key to close any open modal
     ════════════════════════════════════════════════════════ -->
-    <script>
-        (function () {
-            // Backdrop click to close
-            document.querySelectorAll('.modal').forEach(function (modal) {
-                modal.addEventListener('click', function (e) {
-                    if (e.target === modal) modal.style.display = 'none';
-                });
-            });
-            // Escape key to close
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') {
-                    document.querySelectorAll('.modal').forEach(function (modal) {
-                        modal.style.display = 'none';
-                    });
-                }
-            });
-        })();
-    </script>
-
 </body>
 </html>

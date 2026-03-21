@@ -6,6 +6,11 @@
         android:showAsAction="never" />
 
     <item
+        android:id="@+id/action_toggle_chat_photo"
+        android:title="Hide profile photo"
+        android:showAsAction="never" />
+
+    <item
         android:id="@+id/action_refresh_status"
         android:title="Refresh status"
         android:showAsAction="never" />

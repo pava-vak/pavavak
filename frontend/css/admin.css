@@ -38,6 +38,20 @@ body {
     background: rgba(255,255,255,0.3);
 }
 
+.pwa-install-btn {
+    padding: 6px 12px;
+    background: #34a853;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.pwa-install-btn.is-hidden {
+    display: none;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -336,6 +350,10 @@ body {
 table {
     width: 100%;
     border-collapse: collapse;
+}
+
+.table-scroll-wrapper {
+    overflow-x: auto;
 }
 
 th, td {
