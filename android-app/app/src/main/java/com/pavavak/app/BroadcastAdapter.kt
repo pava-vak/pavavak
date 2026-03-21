@@ -30,8 +30,8 @@ class BroadcastAdapter(
         holder.body.text = item.body
         holder.meta.text = buildString {
             append(item.createdAt)
-            if (item.createdByUsername.isNotBlank()) append(" • @${item.createdByUsername}")
-            append(if (item.isRead) " • Read" else " • Unread")
+            if (item.createdByUsername.isNotBlank()) append(" - @${item.createdByUsername}")
+            append(if (item.isRead) " - Read" else " - Unread")
         }
         holder.title.setTypeface(null, if (item.isRead) Typeface.NORMAL else Typeface.BOLD)
         holder.body.alpha = if (item.isRead) 0.88f else 1f

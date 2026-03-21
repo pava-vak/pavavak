@@ -32,6 +32,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ChatListActivity : AppCompatActivity() {
+    companion object {
+        private const val BROADCAST_CHAT_ID = "broadcasts"
+    }
 
     private lateinit var adapter: ChatListAdapter
     private lateinit var progress: ProgressBar
@@ -75,15 +78,23 @@ class ChatListActivity : AppCompatActivity() {
         adapter = ChatListAdapter(
             emptyList(),
             onClick = { chat ->
-                startActivity(
-                    Intent(this, ChatActivity::class.java)
-                        .putExtra(ChatActivity.EXTRA_CHAT_ID, chat.chatId)
-                        .putExtra(ChatActivity.EXTRA_CHAT_NAME, chat.name)
-                        .putExtra(ChatActivity.EXTRA_CHAT_PHOTO, chat.profilePhotoBase64)
-                )
+                if (chat.chatId == BROADCAST_CHAT_ID) {
+                    openAnnouncements()
+                } else {
+                    startActivity(
+                        Intent(this, ChatActivity::class.java)
+                            .putExtra(ChatActivity.EXTRA_CHAT_ID, chat.chatId)
+                            .putExtra(ChatActivity.EXTRA_CHAT_NAME, chat.name)
+                            .putExtra(ChatActivity.EXTRA_CHAT_PHOTO, chat.profilePhotoBase64)
+                    )
+                }
             },
             onLongClick = { chat ->
-                showChatActionsDialog(chat)
+                if (chat.chatId == BROADCAST_CHAT_ID) {
+                    showBroadcastActionsDialog(chat)
+                } else {
+                    showChatActionsDialog(chat)
+                }
             }
         )
         rv.adapter = adapter
@@ -156,16 +167,21 @@ class ChatListActivity : AppCompatActivity() {
                     }
                 }
             }
+            val broadcasts = NativeApi.getUserBroadcasts()
             progress.visibility = View.GONE
             swipeRefresh.isRefreshing = false
-            if (chats.isNotEmpty()) {
-                allChats = chats.map { c ->
+            val mergedChats = mergeBroadcastConversation(
+                chats.map { c ->
                     val id = c.chatId.toIntOrNull()
                     if (id == null) c else c.copy(name = ContactAliasPrefs.aliasFor(this@ChatListActivity, id, c.name))
-                }.sortedByDescending { it.lastSentAtEpochMs }
+                },
+                broadcasts
+            )
+            if (mergedChats.isNotEmpty()) {
+                allChats = mergedChats
                 applyFilter(searchInput.text?.toString().orEmpty())
                 withContext(Dispatchers.IO) {
-                    localStore.cacheConversations(allChats)
+                    localStore.cacheConversations(allChats.filterNot { it.chatId == BROADCAST_CHAT_ID })
                 }
             } else if (allChats.isEmpty()) {
                 allChats = emptyList()
@@ -209,7 +225,7 @@ class ChatListActivity : AppCompatActivity() {
                 true
             }
             R.id.action_broadcasts -> {
-                startActivity(Intent(this, BroadcastInboxActivity::class.java))
+                openAnnouncements()
                 true
             }
             R.id.action_logout -> {
@@ -226,6 +242,76 @@ class ChatListActivity : AppCompatActivity() {
             }
             else -> false
         }
+    }
+
+    private fun openAnnouncements(targetBroadcastId: Int = 0) {
+        startActivity(
+            Intent(this, BroadcastInboxActivity::class.java).apply {
+                if (targetBroadcastId > 0) {
+                    putExtra(BroadcastInboxActivity.EXTRA_TARGET_BROADCAST_ID, targetBroadcastId)
+                }
+            }
+        )
+    }
+
+    private fun mergeBroadcastConversation(
+        chats: List<ChatSummary>,
+        broadcasts: List<UserBroadcast>
+    ): List<ChatSummary> {
+        val orderedChats = chats
+            .filterNot { it.chatId == BROADCAST_CHAT_ID }
+            .sortedByDescending { it.lastSentAtEpochMs }
+        val broadcastChat = buildBroadcastChatSummary(broadcasts) ?: return orderedChats
+        return listOf(broadcastChat) + orderedChats
+    }
+
+    private fun buildBroadcastChatSummary(broadcasts: List<UserBroadcast>): ChatSummary? {
+        val latest = broadcasts.firstOrNull() ?: return null
+        val unreadCount = broadcasts.count { !it.isRead }
+        val preview = when {
+            latest.title.isNotBlank() && latest.body.isNotBlank() -> "${latest.title}: ${latest.body}"
+            latest.body.isNotBlank() -> latest.body
+            latest.title.isNotBlank() -> latest.title
+            else -> "New announcement"
+        }
+        return ChatSummary(
+            chatId = BROADCAST_CHAT_ID,
+            name = "Announcements",
+            lastMessage = preview,
+            lastTime = latest.createdAt,
+            unreadCount = unreadCount,
+            lastIsFromMe = false,
+            lastIsDelivered = false,
+            lastIsRead = unreadCount == 0,
+            lastSentAtEpochMs = Long.MAX_VALUE,
+            profilePhotoBase64 = null
+        )
+    }
+
+    private fun showBroadcastActionsDialog(chat: ChatSummary) {
+        val actions = mutableListOf(
+            "Open announcements" to { openAnnouncements() }
+        )
+        if (chat.unreadCount > 0) {
+            actions += "Mark all as read" to {
+                lifecycleScope.launch {
+                    val ok = NativeApi.markAllBroadcastsRead()
+                    if (ok) {
+                        loadChats()
+                    } else {
+                        emptyText.visibility = View.VISIBLE
+                        emptyText.text = "Couldn't update announcements right now."
+                    }
+                }
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Announcements")
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
+                actions[which].second.invoke()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun applyDecoyUiState() {

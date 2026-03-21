@@ -27,6 +27,7 @@ class BroadcastInboxActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var empty: TextView
     private lateinit var summary: TextView
+    private lateinit var markAllReadButton: MaterialButton
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private var broadcasts: List<UserBroadcast> = emptyList()
     private var pendingOpenBroadcastId: Int = 0
@@ -37,13 +38,18 @@ class BroadcastInboxActivity : AppCompatActivity() {
 
         pendingOpenBroadcastId = intent.getIntExtra(EXTRA_TARGET_BROADCAST_ID, 0)
 
-        findViewById<MaterialToolbar>(R.id.broadcastInboxToolbar).setNavigationOnClickListener { finish() }
+        findViewById<MaterialToolbar>(R.id.broadcastInboxToolbar).apply {
+            subtitle = "Only admins can send here"
+            setNavigationOnClickListener { finish() }
+        }
         progress = findViewById(R.id.broadcastInboxProgress)
         empty = findViewById(R.id.broadcastInboxEmpty)
         summary = findViewById(R.id.broadcastInboxSummary)
         swipeRefresh = findViewById(R.id.broadcastInboxSwipeRefresh)
         swipeRefresh.setOnRefreshListener { loadBroadcasts() }
-        findViewById<MaterialButton>(R.id.broadcastInboxMarkAllReadBtn).setOnClickListener { markAllRead() }
+        markAllReadButton = findViewById<MaterialButton>(R.id.broadcastInboxMarkAllReadBtn).apply {
+            setOnClickListener { markAllRead() }
+        }
 
         adapter = BroadcastAdapter(emptyList(), ::openBroadcast)
         findViewById<RecyclerView>(R.id.broadcastInboxRecycler).apply {
@@ -66,7 +72,12 @@ class BroadcastInboxActivity : AppCompatActivity() {
             swipeRefresh.isRefreshing = false
             adapter.submit(broadcasts)
             val unread = broadcasts.count { !it.isRead }
-            summary.text = "${broadcasts.size} announcement(s) • $unread unread"
+            markAllReadButton.visibility = if (unread > 0) View.VISIBLE else View.GONE
+            summary.text = if (broadcasts.isEmpty()) {
+                "Only admins can send here."
+            } else {
+                "${broadcasts.size} announcement(s) - $unread unread"
+            }
             empty.visibility = if (broadcasts.isEmpty()) View.VISIBLE else View.GONE
 
             if (pendingOpenBroadcastId > 0) {
@@ -102,7 +113,7 @@ class BroadcastInboxActivity : AppCompatActivity() {
                         append(item.body)
                         append("\n\n")
                         append(item.createdAt)
-                        if (item.createdByUsername.isNotBlank()) append(" • @${item.createdByUsername}")
+                        if (item.createdByUsername.isNotBlank()) append(" - @${item.createdByUsername}")
                     }
                 )
                 .setPositiveButton("OK", null)
