@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../lib/prisma');
 const bcrypt = require('bcrypt');
-const crypto = require('crypto');
 const { isAuthenticated, isAdmin } = require('../middleware/auth');
 const { sendToUser } = require('../lib/firebaseAdmin');
 
@@ -13,6 +12,36 @@ function generateTemporaryPassword() {
 
 function generateOneTimePassword() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function issueResetOtpForRequest(resetRequest) {
+  const otp = generateOneTimePassword();
+  const otpHash = await bcrypt.hash(otp, 12);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  const userId = resetRequest.user?.user_id || resetRequest.user_id;
+  const username = resetRequest.user?.username || '';
+
+  await prisma.users.update({
+    where: { user_id: userId },
+    data: {
+      reset_otp_hash: otpHash,
+      reset_otp_expiry: expiresAt,
+      reset_otp_used_at: null,
+      force_password_reset: true,
+      reset_token: null,
+      reset_token_expiry: null
+    }
+  });
+
+  await prisma.password_reset_requests.update({
+    where: { request_id: resetRequest.request_id },
+    data: {
+      status: 'otp_generated',
+      resolved_at: new Date()
+    }
+  });
+
+  return { otp, expiresAt, username };
 }
 
 async function writeSystemLog(action, details, metadata = null) {
@@ -393,35 +422,13 @@ router.post('/password-resets/:requestId/generate-otp', isAuthenticated, isAdmin
       return res.status(404).json({ success: false, error: 'Request not found' });
     }
 
-    const otp = generateOneTimePassword();
-    const otpHash = await bcrypt.hash(otp, 12);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-    await prisma.users.update({
-      where: { user_id: resetRequest.user.user_id },
-      data: {
-        reset_otp_hash: otpHash,
-        reset_otp_expiry: expiresAt,
-        reset_otp_used_at: null,
-        force_password_reset: true,
-        reset_token: null,
-        reset_token_expiry: null
-      }
-    });
-
-    await prisma.password_reset_requests.update({
-      where: { request_id: requestId },
-      data: {
-        status: 'otp_generated',
-        resolved_at: new Date()
-      }
-    });
+    const { otp, expiresAt, username } = await issueResetOtpForRequest(resetRequest);
 
     return res.json({
       success: true,
       otp,
       expiresAt,
-      username: resetRequest.user.username
+      username
     });
   } catch (error) {
     console.error('Generate reset OTP error:', error);
@@ -429,68 +436,49 @@ router.post('/password-resets/:requestId/generate-otp', isAuthenticated, isAdmin
   }
 });
 
-// Generate reset link
+// Deprecated reset-link alias kept only for older cached admin frontends.
 router.post('/password-resets/:requestId/generate-link', isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const requestId = parseInt(req.params.requestId);
+    const requestId = parseInt(req.params.requestId, 10);
+    if (!Number.isInteger(requestId)) {
+      return res.status(400).json({ success: false, error: 'Invalid request id' });
+    }
 
     const resetRequest = await prisma.password_reset_requests.findUnique({
       where: { request_id: requestId },
-      include: { user: true }
-    });
-
-    if (!resetRequest) return res.status(404).json({ success: false, error: 'Request not found' });
-
-    // Generate token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-    // Save token to user
-    await prisma.users.update({
-      where: { user_id: resetRequest.user_id },
-      data: {
-        reset_token: resetTokenHash,
-        reset_token_expiry: expiry
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            username: true
+          }
+        }
       }
     });
 
-    // Update request status
-    await prisma.password_reset_requests.update({
-      where: { request_id: requestId },
-      data: { status: 'link_generated' }
-    });
-
-    const configuredDomain = String(process.env.PUBLIC_APP_URL || process.env.DOMAIN || '')
-      .trim()
-      .replace(/\/+$/, '');
-    const forwardedProto = String(req.get('x-forwarded-proto') || '')
-      .split(',')[0]
-      .trim();
-    const forwardedHost = String(req.get('x-forwarded-host') || req.get('host') || '')
-      .split(',')[0]
-      .trim();
-    const requestDomain = forwardedHost
-      ? `${forwardedProto || (req.secure ? 'https' : 'http')}://${forwardedHost}`
-      : '';
-    const domain = configuredDomain || requestDomain;
-
-    if (!domain) {
-      return res.status(500).json({
-        success: false,
-        error: 'Reset link base URL is not configured'
-      });
+    if (!resetRequest) {
+      return res.status(404).json({ success: false, error: 'Request not found' });
     }
 
-    const resetLink = `${domain}/reset-password.html?token=${resetToken}`;
+    const { otp, expiresAt, username } = await issueResetOtpForRequest(resetRequest);
+    const legacyDisplayValue = `${otp} (expires: ${expiresAt.toISOString()})`;
 
     console.log('='.repeat(50));
-    console.log('PASSWORD RESET LINK GENERATED:');
-    console.log(`User: ${resetRequest.user.username}`);
-    console.log(`Link: ${resetLink}`);
+    console.log('LEGACY RESET LINK ENDPOINT USED; RETURNING OTP INSTEAD');
+    console.log(`User: ${username}`);
+    console.log(`OTP: ${otp}`);
+    console.log(`Expires: ${expiresAt.toISOString()}`);
     console.log('='.repeat(50));
 
-    res.json({ success: true, resetLink });
+    res.json({
+      success: true,
+      deprecated: true,
+      mode: 'otp',
+      otp,
+      expiresAt,
+      username,
+      resetLink: legacyDisplayValue
+    });
   } catch (error) {
     console.error('Generate reset link error:', error);
     res.status(500).json({ success: false, error: 'Failed' });
