@@ -17,6 +17,7 @@ async function checkAuth() {
         const response = await fetch(`${API_URL}/auth/session`, { credentials: 'include' });
         const data = await response.json();
         if (!data.authenticated) { window.location.href = '/index.html'; return; }
+        if (data.user.forcePasswordReset) { window.location.href = '/index.html'; return; }
         if (!data.user.isAdmin) { window.location.href = '/chat.html'; return; }
         currentUser = data.user;
         document.getElementById('adminUsername').textContent = data.user.fullName || data.user.username;
@@ -39,6 +40,7 @@ function setupEventListeners() {
 
     // User tab
     document.getElementById('createUserBtn').addEventListener('click', openCreateUserModal);
+    document.getElementById('setAllPasswordsBtn').addEventListener('click', openSetAllPasswordsModal);
     document.getElementById('resetAllPasswordsBtn').addEventListener('click', resetAllUserPasswords);
     document.getElementById('userSearchInput').addEventListener('input', filterUsers);
 
@@ -50,6 +52,14 @@ function setupEventListeners() {
     // Password modal
     document.getElementById('copyPasswordBtn').addEventListener('click', copyTempPassword);
     document.getElementById('closePasswordModalBtn').addEventListener('click', () => closeModal('passwordModal'));
+
+    // Shared password modals
+    document.getElementById('applySetAllPasswordsBtn').addEventListener('click', setAllUserPasswords);
+    document.getElementById('closeSetAllPasswordsModalBtn').addEventListener('click', () => closeModal('setAllPasswordsModal'));
+    document.getElementById('cancelSetAllPasswordsBtn').addEventListener('click', () => closeModal('setAllPasswordsModal'));
+    document.getElementById('copySharedPasswordBtn').addEventListener('click', copySharedPassword);
+    document.getElementById('closeSharedPasswordResultModalBtn').addEventListener('click', () => closeModal('sharedPasswordResultModal'));
+    document.getElementById('dismissSharedPasswordResultBtn').addEventListener('click', () => closeModal('sharedPasswordResultModal'));
 
     // Reset link modal
     document.getElementById('copyResetLinkBtn').addEventListener('click', copyResetLink);
@@ -438,6 +448,78 @@ async function createUser() {
 function copyTempPassword() {
     const password = document.getElementById('tempPassword').textContent;
     copyToClipboard(password, 'Password copied!');
+}
+
+function openSetAllPasswordsModal() {
+    document.getElementById('sharedPasswordInput').value = '';
+    document.getElementById('sharedPasswordConfirmInput').value = '';
+    document.getElementById('sharedPasswordIncludeAdmins').checked = true;
+    document.getElementById('sharedPasswordIncludeCurrentAdmin').checked = true;
+    document.getElementById('sharedPasswordForceReset').checked = false;
+    openModal('setAllPasswordsModal');
+}
+
+async function setAllUserPasswords() {
+    const password = document.getElementById('sharedPasswordInput').value.trim();
+    const confirmPassword = document.getElementById('sharedPasswordConfirmInput').value.trim();
+    const includeAdmins = document.getElementById('sharedPasswordIncludeAdmins').checked;
+    const includeCurrentAdmin = document.getElementById('sharedPasswordIncludeCurrentAdmin').checked;
+    const forcePasswordReset = document.getElementById('sharedPasswordForceReset').checked;
+
+    if (password.length < 8) {
+        showToast('Password must be at least 8 characters', 'error');
+        return;
+    }
+
+    if (password !== confirmPassword) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+
+    if (!confirm('Apply this shared password to all selected users?')) return;
+
+    try {
+        const res = await fetch(`${API_URL}/admin/users/set-passwords-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                newPassword: password,
+                includeAdmins,
+                includeCurrentAdmin,
+                forcePasswordReset
+            })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+            showToast(data.error || 'Failed to set shared password', 'error');
+            return;
+        }
+
+        closeModal('setAllPasswordsModal');
+        showSharedPasswordResult(data);
+        showToast(`Shared password applied to ${data.summary.totalUpdated} users`, 'success');
+    } catch (error) {
+        showToast('Failed to set shared password', 'error');
+    }
+}
+
+function showSharedPasswordResult(data) {
+    const scopeParts = [];
+    scopeParts.push(data.summary.includeAdmins ? 'admins included' : 'admins excluded');
+    scopeParts.push(data.summary.includeCurrentAdmin ? 'current admin included' : 'current admin excluded');
+
+    document.getElementById('sharedPasswordUserCount').textContent = String(data.summary.totalUpdated);
+    document.getElementById('sharedPasswordScope').textContent = scopeParts.join(', ');
+    document.getElementById('sharedPasswordForceResetValue').textContent = data.summary.forcePasswordReset ? 'Yes' : 'No';
+    document.getElementById('sharedPasswordValue').textContent = data.appliedPassword;
+    openModal('sharedPasswordResultModal');
+}
+
+function copySharedPassword() {
+    const password = document.getElementById('sharedPasswordValue').textContent;
+    copyToClipboard(password, 'Shared password copied!');
 }
 
 // Edit User

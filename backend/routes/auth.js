@@ -262,22 +262,44 @@ router.post('/verify-2fa', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // GET /api/auth/session
 // ─────────────────────────────────────────────────────────────
-router.get('/session', (req, res) => {
-  if (req.isAuthenticated()) {
+router.get('/session', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.json({ success: true, authenticated: false });
+  }
+
+  try {
+    const freshUser = await prisma.users.findUnique({
+      where: { user_id: req.user.user_id },
+      select: {
+        user_id: true,
+        username: true,
+        full_name: true,
+        email: true,
+        is_admin: true,
+        force_password_reset: true
+      }
+    });
+
+    if (!freshUser) {
+      req.logout(() => {});
+      return res.json({ success: true, authenticated: false });
+    }
+
     res.json({
       success: true,
       authenticated: true,
       user: {
-        userId: req.user.user_id,
-        username: req.user.username,
-        fullName: req.user.full_name,
-        email: req.user.email,
-        isAdmin: req.user.is_admin,
-        forcePasswordReset: !!req.user.force_password_reset
+        userId: freshUser.user_id,
+        username: freshUser.username,
+        fullName: freshUser.full_name,
+        email: freshUser.email,
+        isAdmin: freshUser.is_admin,
+        forcePasswordReset: !!freshUser.force_password_reset
       }
     });
-  } else {
-    res.json({ success: true, authenticated: false });
+  } catch (error) {
+    console.error('Session error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load session' });
   }
 });
 

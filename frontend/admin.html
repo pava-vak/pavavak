@@ -127,6 +127,7 @@
             <div class="section-header">
                 <h2>👥 User Management</h2>
                 <div>
+                    <button class="btn btn-primary" id="setAllPasswordsBtn">Set All Passwords</button>
                     <button class="btn btn-warning" id="resetAllPasswordsBtn">Reset All Passwords</button>
                     <button class="btn btn-success" id="createUserBtn">+ Create User</button>
                 </div>
@@ -320,6 +321,68 @@
             <div class="modal-actions">
                 <button class="btn btn-primary" id="copyPasswordBtn">Copy Password</button>
                 <button class="btn btn-success" id="closePasswordModalBtn">I've Saved It</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set Shared Password Modal -->
+    <div id="setAllPasswordsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="setAllPasswordsModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="setAllPasswordsModalTitle">Set Shared Password For Users</h3>
+                <button class="modal-close" id="closeSetAllPasswordsModalBtn" aria-label="Close">Ã—</button>
+            </div>
+            <div class="form-group">
+                <label for="sharedPasswordInput">Shared Password</label>
+                <input type="password" id="sharedPasswordInput" minlength="8" autocomplete="new-password" placeholder="Minimum 8 characters">
+            </div>
+            <div class="form-group">
+                <label for="sharedPasswordConfirmInput">Confirm Shared Password</label>
+                <input type="password" id="sharedPasswordConfirmInput" minlength="8" autocomplete="new-password" placeholder="Re-enter the shared password">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="sharedPasswordIncludeAdmins" checked> Include admin accounts
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="sharedPasswordIncludeCurrentAdmin" checked> Include my current admin account
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="sharedPasswordForceReset"> Force password change on next login
+                </label>
+            </div>
+            <p class="warning-text">This overwrites the selected users' existing passwords with the same shared value.</p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="applySetAllPasswordsBtn">Apply Shared Password</button>
+                <button class="btn" id="cancelSetAllPasswordsBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shared Password Result Modal -->
+    <div id="sharedPasswordResultModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="sharedPasswordResultModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="sharedPasswordResultModalTitle">Shared Password Applied</h3>
+                <button class="modal-close" id="closeSharedPasswordResultModalBtn" aria-label="Close">Ã—</button>
+            </div>
+            <div class="password-display">
+                <p>Users Updated: <strong id="sharedPasswordUserCount"></strong></p>
+                <p>Scope: <strong id="sharedPasswordScope"></strong></p>
+                <p>Force Reset On Next Login: <strong id="sharedPasswordForceResetValue"></strong></p>
+                <div class="temp-password-box">
+                    <label>Applied Password:</label>
+                    <div class="temp-password" id="sharedPasswordValue"></div>
+                </div>
+                <p class="warning-text">Existing passwords cannot be shown. This modal only confirms the shared password you just applied.</p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="copySharedPasswordBtn">Copy Password</button>
+                <button class="btn btn-success" id="dismissSharedPasswordResultBtn">Close</button>
             </div>
         </div>
     </div>

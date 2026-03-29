@@ -14,6 +14,23 @@ function generateOneTimePassword() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function parseBulkPasswordOptions(body, currentUserId) {
+  return {
+    includeAdmins: body?.includeAdmins !== false,
+    includeCurrentAdmin: body?.includeCurrentAdmin !== false,
+    forcePasswordReset: body?.forcePasswordReset === true,
+    currentUserId
+  };
+}
+
+function filterBulkPasswordUsers(users, options) {
+  return users.filter((user) => {
+    if (!options.includeAdmins && user.is_admin) return false;
+    if (!options.includeCurrentAdmin && user.user_id === options.currentUserId) return false;
+    return true;
+  });
+}
+
 async function issueResetOtpForRequest(resetRequest) {
   const otp = generateOneTimePassword();
   const otpHash = await bcrypt.hash(otp, 12);
@@ -307,19 +324,14 @@ router.post('/users/:userId/reset-password', isAuthenticated, isAdmin, async (re
 // Reset all users' passwords (admin action)
 router.post('/users/reset-passwords-all', isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const includeAdmins = req.body?.includeAdmins !== false;
-    const includeCurrentAdmin = req.body?.includeCurrentAdmin !== false;
+    const options = parseBulkPasswordOptions(req.body, req.user.user_id);
 
     const users = await prisma.users.findMany({
       select: { user_id: true, username: true, email: true, is_admin: true },
       orderBy: { user_id: 'asc' }
     });
 
-    const targetUsers = users.filter(u => {
-      if (!includeAdmins && u.is_admin) return false;
-      if (!includeCurrentAdmin && u.user_id === req.user.user_id) return false;
-      return true;
-    });
+    const targetUsers = filterBulkPasswordUsers(users, options);
 
     if (targetUsers.length === 0) {
       return res.status(400).json({ success: false, error: 'No users selected for reset' });
@@ -358,14 +370,85 @@ router.post('/users/reset-passwords-all', isAuthenticated, isAdmin, async (req, 
       success: true,
       summary: {
         totalReset: resetCredentials.length,
-        includeAdmins,
-        includeCurrentAdmin
+        includeAdmins: options.includeAdmins,
+        includeCurrentAdmin: options.includeCurrentAdmin
       },
       resetCredentials
     });
   } catch (error) {
     console.error('Bulk reset passwords error:', error);
     res.status(500).json({ success: false, error: 'Failed to reset passwords' });
+  }
+});
+
+// Set one shared password for all selected users (admin action)
+router.post('/users/set-passwords-all', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const newPassword = String(req.body?.newPassword || '').trim();
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+    }
+
+    const options = parseBulkPasswordOptions(req.body, req.user.user_id);
+    const users = await prisma.users.findMany({
+      select: { user_id: true, username: true, email: true, is_admin: true },
+      orderBy: { user_id: 'asc' }
+    });
+
+    const targetUsers = filterBulkPasswordUsers(users, options);
+    if (targetUsers.length === 0) {
+      return res.status(400).json({ success: false, error: 'No users selected for password update' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const targetUserIds = targetUsers.map((user) => user.user_id);
+
+    await prisma.users.updateMany({
+      where: {
+        user_id: { in: targetUserIds }
+      },
+      data: {
+        password_hash: passwordHash,
+        force_password_reset: options.forcePasswordReset,
+        reset_otp_hash: null,
+        reset_otp_expiry: null,
+        reset_otp_used_at: null,
+        reset_token: null,
+        reset_token_expiry: null
+      }
+    });
+
+    await writeSystemLog(
+      'ADMIN_SHARED_PASSWORD_SET',
+      `Admin ${req.user.username || req.user.user_id} set a shared password for ${targetUsers.length} users`,
+      {
+        adminId: req.user.user_id,
+        includeAdmins: options.includeAdmins,
+        includeCurrentAdmin: options.includeCurrentAdmin,
+        forcePasswordReset: options.forcePasswordReset,
+        targetUserIds
+      }
+    );
+
+    res.json({
+      success: true,
+      summary: {
+        totalUpdated: targetUsers.length,
+        includeAdmins: options.includeAdmins,
+        includeCurrentAdmin: options.includeCurrentAdmin,
+        forcePasswordReset: options.forcePasswordReset
+      },
+      appliedPassword: newPassword,
+      updatedUsers: targetUsers.map((user) => ({
+        userId: user.user_id,
+        username: user.username,
+        email: user.email,
+        isAdmin: user.is_admin
+      }))
+    });
+  } catch (error) {
+    console.error('Set shared password error:', error);
+    res.status(500).json({ success: false, error: 'Failed to set shared password' });
   }
 });
 
