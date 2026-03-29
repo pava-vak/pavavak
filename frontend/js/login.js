@@ -1,22 +1,21 @@
 // ============================================================
 // PaVa-Vak Login Logic  |  login.js
-// Fix: API_URL changed from hardcoded Render.com to relative /api
-// Everything else identical to original
+// Web login now enforces password reset after admin-issued OTP login.
 // ============================================================
 
 const API_URL = '/api';
+let postResetRedirect = '/chat.html';
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     checkSession();
     checkServer();
     initLogin();
     initTwoFactor();
+    initForcePasswordReset();
     initPasswordToggle();
     initForgotPassword();
 });
 
-// Check server status
 async function checkServer() {
     const statusEl = document.getElementById('status');
 
@@ -25,15 +24,14 @@ async function checkServer() {
             method: 'GET',
             credentials: 'include'
         });
-        statusEl.textContent = '✓ Server Online';
+        statusEl.textContent = 'Server Online';
         statusEl.className = 'status online';
     } catch (error) {
-        statusEl.textContent = '✗ Server Offline';
+        statusEl.textContent = 'Server Offline';
         statusEl.className = 'status';
     }
 }
 
-// Show message
 function showMessage(text, type) {
     const messageEl = document.getElementById('message');
     messageEl.textContent = text;
@@ -44,11 +42,10 @@ function showMessage(text, type) {
     }, 5000);
 }
 
-// Initialize login form
 function initLogin() {
     const form = document.getElementById('loginForm');
 
-    form.addEventListener('submit', async function (e) {
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const username = document.getElementById('username').value.trim();
@@ -73,10 +70,15 @@ function initLogin() {
                     showTwoFactorForm();
                     loginBtn.disabled = false;
                     loginBtn.textContent = 'Login';
+                } else if (needsForcedReset(data)) {
+                    postResetRedirect = resolveRedirect(data);
+                    showForcePasswordResetForm();
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
                 } else {
-                    showMessage('✓ Login successful!', 'success');
+                    showMessage('Login successful!', 'success');
                     setTimeout(() => {
-                        window.location.href = data.redirect || '/chat.html';
+                        window.location.href = resolveRedirect(data);
                     }, 1000);
                 }
             } else {
@@ -84,7 +86,6 @@ function initLogin() {
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Login';
             }
-
         } catch (error) {
             showMessage('Server connection failed', 'error');
             console.error('Login error:', error);
@@ -94,12 +95,11 @@ function initLogin() {
     });
 }
 
-// Initialize 2FA form
 function initTwoFactor() {
     const form = document.getElementById('twoFactorForm');
     const cancelBtn = document.getElementById('cancel2FAButton');
 
-    form.addEventListener('submit', async function (e) {
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const code = document.getElementById('twoFactorCode').value.trim();
@@ -119,17 +119,21 @@ function initTwoFactor() {
             const data = await response.json();
 
             if (data.success) {
-                showMessage('✓ 2FA verified!', 'success');
-                setTimeout(() => {
-                    window.location.href = data.redirect || (data.user.isAdmin ? '/admin.html' : '/chat.html');
-                }, 1000);
+                if (needsForcedReset(data)) {
+                    postResetRedirect = resolveRedirect(data);
+                    showForcePasswordResetForm();
+                } else {
+                    showMessage('2FA verified!', 'success');
+                    setTimeout(() => {
+                        window.location.href = resolveRedirect(data);
+                    }, 1000);
+                }
             } else {
                 showMessage(data.error || 'Invalid 2FA code', 'error');
                 verifyBtn.disabled = false;
                 verifyBtn.textContent = 'Verify';
                 document.getElementById('twoFactorCode').value = '';
             }
-
         } catch (error) {
             showMessage('Verification failed', 'error');
             console.error('2FA error:', error);
@@ -142,23 +146,86 @@ function initTwoFactor() {
         hideTwoFactorForm();
     });
 
-    // Auto-format 2FA code
     const codeInput = document.getElementById('twoFactorCode');
     codeInput.addEventListener('input', function(e) {
         e.target.value = e.target.value.replace(/[^0-9]/g, '').substring(0, 6);
     });
 }
 
-// Show 2FA form
+function initForcePasswordReset() {
+    const form = document.getElementById('forcePasswordResetForm');
+    const saveBtn = document.getElementById('saveResetPasswordButton');
+    const logoutBtn = document.getElementById('logoutResetButton');
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const password = document.getElementById('forceResetPassword').value;
+        const confirmPassword = document.getElementById('forceResetConfirmPassword').value;
+
+        if (password.length < 8) {
+            showMessage('Password must be at least 8 characters', 'error');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showMessage('Passwords do not match', 'error');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        try {
+            const response = await fetch(`${API_URL}/auth/complete-password-reset`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ newPassword: password })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                showMessage('Password updated. Redirecting...', 'success');
+                setTimeout(() => {
+                    window.location.href = postResetRedirect;
+                }, 800);
+            } else {
+                showMessage(data.error || 'Failed to update password', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save New Password';
+            }
+        } catch (error) {
+            showMessage('Failed to update password', 'error');
+            console.error('Forced reset error:', error);
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save New Password';
+        }
+    });
+
+    logoutBtn.addEventListener('click', async function() {
+        try {
+            await fetch(`${API_URL}/auth/logout`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+        } catch (error) {
+            console.error('Logout after forced reset failed:', error);
+        }
+        window.location.href = '/';
+    });
+}
+
 function showTwoFactorForm() {
     document.getElementById('loginForm').classList.add('hidden');
     document.getElementById('twoFactorForm').classList.remove('hidden');
+    document.getElementById('forcePasswordResetForm').classList.add('hidden');
     document.getElementById('twoFactorCode').focus();
 }
 
-// Hide 2FA form
 function hideTwoFactorForm() {
     document.getElementById('twoFactorForm').classList.add('hidden');
+    document.getElementById('forcePasswordResetForm').classList.add('hidden');
     document.getElementById('loginForm').classList.remove('hidden');
     document.getElementById('twoFactorCode').value = '';
     document.getElementById('password').value = '';
@@ -166,7 +233,17 @@ function hideTwoFactorForm() {
     document.getElementById('loginBtn').textContent = 'Login';
 }
 
-// Initialize password toggle
+function showForcePasswordResetForm() {
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('twoFactorForm').classList.add('hidden');
+    document.getElementById('forcePasswordResetForm').classList.remove('hidden');
+    document.getElementById('forceResetPassword').value = '';
+    document.getElementById('forceResetConfirmPassword').value = '';
+    document.getElementById('saveResetPasswordButton').disabled = false;
+    document.getElementById('saveResetPasswordButton').textContent = 'Save New Password';
+    document.getElementById('forceResetPassword').focus();
+}
+
 function initPasswordToggle() {
     const toggleBtn = document.getElementById('togglePassword');
     const passwordInput = document.getElementById('password');
@@ -174,15 +251,14 @@ function initPasswordToggle() {
     toggleBtn.addEventListener('click', function() {
         if (passwordInput.type === 'password') {
             passwordInput.type = 'text';
-            toggleBtn.textContent = '🙈';
+            toggleBtn.textContent = 'Hide';
         } else {
             passwordInput.type = 'password';
-            toggleBtn.textContent = '👁️';
+            toggleBtn.textContent = 'Show';
         }
     });
 }
 
-// Initialize forgot password
 function initForgotPassword() {
     const link = document.getElementById('forgotPasswordLink');
 
@@ -211,17 +287,19 @@ function initForgotPassword() {
     });
 }
 
-// Check if already logged in
 async function checkSession() {
     try {
-       const response = await fetch(`${API_URL}/auth/session?t=${Date.now()}`, {
-    credentials: 'include',
-    cache: 'no-store'
-});
+        const response = await fetch(`${API_URL}/auth/session?t=${Date.now()}`, {
+            credentials: 'include',
+            cache: 'no-store'
+        });
         const data = await response.json();
 
         if (data.authenticated) {
-            if (data.user.isAdmin) {
+            if (data.user.forcePasswordReset) {
+                postResetRedirect = data.user.isAdmin ? '/admin.html' : '/chat.html';
+                showForcePasswordResetForm();
+            } else if (data.user.isAdmin) {
                 window.location.href = '/admin.html';
             } else {
                 window.location.href = '/chat.html';
@@ -230,4 +308,14 @@ async function checkSession() {
     } catch (error) {
         console.error('Session check error:', error);
     }
+}
+
+function needsForcedReset(data) {
+    return !!(data.requiresPasswordReset || (data.user && data.user.forcePasswordReset));
+}
+
+function resolveRedirect(data) {
+    if (data.redirect) return data.redirect;
+    if (data.user && data.user.isAdmin) return '/admin.html';
+    return '/chat.html';
 }
