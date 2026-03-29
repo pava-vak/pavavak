@@ -324,24 +324,24 @@
         </div>
     </div>
 
-    <!-- Reset Password Link Modal -->
+    <!-- Reset Password OTP Modal -->
     <div id="resetLinkModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="resetLinkModalTitle">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="resetLinkModalTitle">🔑 Password Reset Link</h3>
+                <h3 id="resetLinkModalTitle">🔑 Password Reset OTP</h3>
                 <button class="modal-close" id="closeResetLinkModalBtn" aria-label="Close">×</button>
             </div>
             <div class="password-display">
                 <p>User: <strong id="resetLinkUsername"></strong></p>
                 <div class="temp-password-box">
-                    <label>Reset Link (valid 24 hours):</label>
+                    <label>Reset OTP:</label>
                     <div class="temp-password small" id="resetLinkUrl"></div>
                 </div>
-                <p class="warning-text">⚠️ Send this link to the user via SMS/Email/WhatsApp manually.</p>
-                <p class="warning-text">Link expires in 24 hours.</p>
+                <p class="warning-text">⚠️ Share this OTP with the user manually. They can log in with it and will be forced to set a new password.</p>
+                <p class="warning-text">OTP expires at the time shown above.</p>
             </div>
             <div class="modal-actions">
-                <button class="btn btn-primary" id="copyResetLinkBtn">Copy Link</button>
+                <button class="btn btn-primary" id="copyResetLinkBtn">Copy OTP</button>
                 <button class="btn" id="dismissResetLinkBtn">Close</button>
             </div>
         </div>

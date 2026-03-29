@@ -461,7 +461,27 @@ router.post('/password-resets/:requestId/generate-link', isAuthenticated, isAdmi
       data: { status: 'link_generated' }
     });
 
-    const domain = process.env.DOMAIN || 'http://localhost:3000';
+    const configuredDomain = String(process.env.PUBLIC_APP_URL || process.env.DOMAIN || '')
+      .trim()
+      .replace(/\/+$/, '');
+    const forwardedProto = String(req.get('x-forwarded-proto') || '')
+      .split(',')[0]
+      .trim();
+    const forwardedHost = String(req.get('x-forwarded-host') || req.get('host') || '')
+      .split(',')[0]
+      .trim();
+    const requestDomain = forwardedHost
+      ? `${forwardedProto || (req.secure ? 'https' : 'http')}://${forwardedHost}`
+      : '';
+    const domain = configuredDomain || requestDomain;
+
+    if (!domain) {
+      return res.status(500).json({
+        success: false,
+        error: 'Reset link base URL is not configured'
+      });
+    }
+
     const resetLink = `${domain}/reset-password.html?token=${resetToken}`;
 
     console.log('='.repeat(50));
